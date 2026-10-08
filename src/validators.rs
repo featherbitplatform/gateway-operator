@@ -55,7 +55,7 @@ pub fn is_self_contained(p: &PolicyConfig) -> bool {
     p.nodes.iter().all(|n| {
         n.config_ref.is_none()
             && n.node_type != "supernode"
-            && n.config.get("store").is_none()
+            && !n.config.contains_key("store")
             && n.config
                 .get("session")
                 .and_then(|s| s.get("store"))
