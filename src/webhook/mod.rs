@@ -17,6 +17,25 @@ pub fn router() -> Router {
         .route("/validate/featherbit.io/v1alpha1/{kind}", post(validate))
 }
 
+/// Metric label for a kind: the seven known kinds, else `unknown`, so URL
+/// paths and request bodies cannot grow label cardinality.
+fn metric_kind(kind: &str) -> &str {
+    const KINDS: [&str; 7] = [
+        "Route",
+        "Policy",
+        "Supernode",
+        "PluginConfig",
+        "Store",
+        "Consumer",
+        "FeatherbitGateway",
+    ];
+    KINDS
+        .iter()
+        .find(|k| **k == kind)
+        .copied()
+        .unwrap_or("unknown")
+}
+
 async fn validate(
     AxPath(kind): AxPath<String>,
     Json(review): Json<AdmissionReview<DynamicObject>>,
@@ -38,11 +57,12 @@ async fn validate(
         } else {
             req.kind.kind.clone()
         };
+        let label = metric_kind(&kind);
         if let Err(msg) = admit::admit(&kind, &name, &spec) {
-            crate::telemetry::webhook_observed(&kind, false);
+            crate::telemetry::webhook_observed(label, false);
             res = res.deny(msg);
         } else {
-            crate::telemetry::webhook_observed(&kind, true);
+            crate::telemetry::webhook_observed(label, true);
         }
     }
     Json(res.into_review())
@@ -113,6 +133,14 @@ mod tests {
             .await
             .unwrap();
         serde_json::from_slice(&bytes).unwrap()
+    }
+
+    #[test]
+    fn metric_kind_collapses_unknown_kinds() {
+        assert_eq!(metric_kind("Route"), "Route");
+        assert_eq!(metric_kind("FeatherbitGateway"), "FeatherbitGateway");
+        assert_eq!(metric_kind("Whatever"), "unknown");
+        assert_eq!(metric_kind(""), "unknown");
     }
 
     #[tokio::test]
