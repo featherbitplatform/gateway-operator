@@ -19,11 +19,17 @@ CHART_VERSION_ARGS=()
 if [ -n "${GATEWAY_CHART_VERSION:-}" ]; then CHART_VERSION_ARGS=(--version "$GATEWAY_CHART_VERSION"); fi
 PF_PIDS=()
 
+# Mirrored by the "Collect cluster state" step of .github/workflows/e2e.yml.
+dump() {
+  kubectl get routes,policies,featherbitgateways -A -o yaml || true
+  kubectl -n gw get configmaps -l app.kubernetes.io/managed-by=featherbit-operator -o yaml || true
+  kubectl -n gw get pods || true
+  kubectl -n gw logs deploy/op-featherbit-operator --tail=200 || true
+  kubectl -n gw logs -l app.kubernetes.io/name=featherbit-gateway --all-containers --tail=100 --prefix || true
+}
 fail() {
   echo "FAIL: $1" >&2
-  kubectl -n gw get featherbitgateways -o yaml || true
-  kubectl -n gw get pods || true
-  kubectl -n gw logs deploy/op-featherbit-operator --tail=100 || true
+  dump >&2
   exit 1
 }
 wait_cond() { kubectl -n "$1" wait --for=condition="$3" "$2" --timeout=120s || fail "$2 never reached $3"; }
@@ -43,7 +49,8 @@ wait_served() {
 
 kind create cluster --name "$CLUSTER" --wait 120s
 trap cleanup EXIT
-docker build -t "$IMAGE" .
+# PROFILE=release skips the fat LTO of the dist profile; e2e does not ship the image.
+docker build --build-arg PROFILE=release -t "$IMAGE" .
 kind load docker-image "$IMAGE" --name "$CLUSTER"
 
 kubectl create ns gw
@@ -79,6 +86,11 @@ kubectl -n shop wait \
   route/orphan --timeout=60s || fail "orphan route not flagged"
 wait_cond shop route/hello Programmed
 wait_cond gw featherbitgateway/edge Ready
+# The excluded route is left out of the render and the valid route keeps serving.
+if kubectl -n gw get configmap edge-gateway-config -o jsonpath='{.data.gateway\.yaml}' | grep -q orphan; then
+  fail "orphan route leaked into the rendered ConfigMap"
+fi
+curl -fsS "http://localhost:18080/hello" | grep -q operator || fail "/hello stopped serving after the orphan route was applied"
 
 # 3. etcd mode, two replicas. gatewayRaw seeds an empty prefix with valid YAML
 #    (config.gateway=null would render the text "null").
@@ -91,8 +103,21 @@ helm install edge-etcd "$GATEWAY_CHART" ${CHART_VERSION_ARGS[@]+"${CHART_VERSION
   --wait --timeout 180s
 kubectl apply -f e2e/samples/gateway-etcd.yaml
 wait_cond gw featherbitgateway/edge-etcd Ready
+kubectl -n gw wait --for=condition=Available deploy/edge-etcd-featherbit-gateway --timeout=120s \
+  || fail "etcd-mode gateway never became Available"
+[ "$(kubectl -n gw get deploy edge-etcd-featherbit-gateway -o jsonpath='{.status.availableReplicas}')" = 2 ] \
+  || fail "etcd-mode gateway does not have 2 available replicas"
 kubectl -n gw port-forward svc/edge-etcd-featherbit-gateway 18081:80 >/dev/null 2>&1 &
 PF_PIDS+=($!)
 sleep 2
 wait_served 18081 /hello 15 || fail "etcd-mode gateway never served the route"
+# Every replica must serve the route, not just whichever pod the Service picks.
+port=18090
+for pod in $(kubectl -n gw get pods -l app.kubernetes.io/instance=edge-etcd -o name); do
+  kubectl -n gw port-forward "$pod" "$port:8080" >/dev/null 2>&1 &
+  PF_PIDS+=($!)
+  sleep 2
+  wait_served "$port" /hello 15 || fail "$pod never served the route from etcd"
+  port=$((port + 1))
+done
 echo "e2e: OK"

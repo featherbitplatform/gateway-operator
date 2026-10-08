@@ -19,7 +19,7 @@ permissions:
 jobs:
   kind:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 60
     env:
       GATEWAY_CHART: gateway/charts/featherbit-gateway
       KEEP_CLUSTER: "1"   # the runner is discarded; keeps the cluster for the failure collection step
@@ -48,8 +48,10 @@ jobs:
         if: failure()
         run: |
           kubectl -n gw get all -o yaml > gw-all.yaml || true
-          kubectl -n gw get featherbitgateways -o yaml > gw-gateways.yaml || true
+          kubectl get routes,policies,featherbitgateways -A -o yaml > gw-gateways.yaml || true
+          kubectl -n gw get configmaps -l app.kubernetes.io/managed-by=featherbit-operator -o yaml > gw-rendered.yaml || true
           kubectl -n gw logs deploy/op-featherbit-operator --tail=500 > operator.log || true
+          kubectl -n gw logs -l app.kubernetes.io/name=featherbit-gateway --all-containers --tail=300 --prefix > gateway.log || true
 
       - uses: actions/upload-artifact@v4
         if: failure()
@@ -59,5 +61,7 @@ jobs:
             err.txt
             gw-all.yaml
             gw-gateways.yaml
+            gw-rendered.yaml
             operator.log
+            gateway.log
           if-no-files-found: ignore

@@ -5,3 +5,4 @@
 /sast-out/
 /sbom/
 *.cdx.json
+/err.txt

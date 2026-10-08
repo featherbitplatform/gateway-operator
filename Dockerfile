@@ -17,13 +17,16 @@ ENV CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}
 WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
 COPY src/ src/
-# `dist` = release + fat LTO + one codegen unit (Cargo.toml).
-RUN cargo auditable build --profile dist --locked
+# `dist` = release + fat LTO + one codegen unit (Cargo.toml); e2e builds use
+# `--build-arg PROFILE=release` to skip the fat LTO.
+ARG PROFILE=dist
+RUN cargo auditable build --profile ${PROFILE} --locked
 
 FROM scratch
 
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-COPY --from=builder /app/target/dist/featherbit-operator /featherbit-operator
+ARG PROFILE=dist
+COPY --from=builder /app/target/${PROFILE}/featherbit-operator /featherbit-operator
 
 EXPOSE 8080 9443
 
