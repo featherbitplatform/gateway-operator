@@ -1,0 +1,15 @@
+# etcd-mode gateway: the operator writes to etcd. The prefix is distinct from
+# any other gateway sharing the same etcd.
+apiVersion: featherbit.io/v1alpha1
+kind: FeatherbitGateway
+metadata:
+  name: edge-etcd
+  namespace: gw
+spec:
+  sink:
+    etcd:
+      endpoints: ["http://etcd.gw.svc:2379"]
+      prefix: /e2e
+  resources:
+    namespaces:
+      from: All

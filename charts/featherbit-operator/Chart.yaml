@@ -1,0 +1,29 @@
+apiVersion: v2
+name: featherbit-operator
+description: Kubernetes operator for the featherbit API gateway — CRDs, admission webhook and FeatherbitGateway management
+type: application
+# version and appVersion track the crate version in Cargo.toml and are bumped
+# in the same release commit; src/crd/mod.rs has a test for it.
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.29.0-0"
+home: https://featherbitplatform.github.io/gateway/
+icon: https://raw.githubusercontent.com/featherbitplatform/gateway/main/banner.png
+sources:
+  - https://github.com/featherbitplatform/gateway-operator
+  - https://github.com/featherbitplatform/gateway
+keywords:
+  - api-gateway
+  - operator
+  - crd
+  - rust
+maintainers:
+  - name: featherbit
+    url: https://github.com/featherbitplatform
+annotations:
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/links: |
+    - name: Gateway documentation
+      url: https://featherbitplatform.github.io/gateway/
+    - name: Source
+      url: https://github.com/featherbitplatform/gateway-operator

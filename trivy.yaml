@@ -1,0 +1,13 @@
+# trivy configuration — container image scanning (OS packages + embedded deps).
+# High/critical findings fail the scan (exit-code is passed on the CLI so that
+# report-only invocations remain possible).
+
+severity:
+  - HIGH
+  - CRITICAL
+
+scan:
+  skip-dirs:
+    - target
+    - sast-out
+    - .worktrees

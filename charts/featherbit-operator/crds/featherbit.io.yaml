@@ -1,0 +1,1206 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: routes.featherbit.io
+spec:
+  group: featherbit.io
+  names:
+    categories:
+    - featherbit
+    kind: Route
+    plural: routes
+    shortNames:
+    - fbroute
+    singular: route
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.policy
+      name: Policy
+      type: string
+    - jsonPath: .spec.match.path
+      name: Path
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Accepted")].status
+      name: Accepted
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Programmed")].status
+      name: Programmed
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        properties:
+          spec:
+            description: Binds a request match rule to a named policy.
+            properties:
+              match:
+                description: 'Conditions a request must satisfy (YAML key: `match`).'
+                properties:
+                  headers:
+                    additionalProperties:
+                      type: string
+                    default: {}
+                    description: Required header name → value pairs; empty means no header constraints.
+                    type: object
+                  host:
+                    description: |-
+                      Required `Host` value; `None` matches any host. Exact hostname or a
+                      single-label wildcard (`*.example.com`); the request's port is ignored.
+                      Merged with [`hosts`](Self::hosts) at match time.
+                    nullable: true
+                    type: string
+                  hosts:
+                    description: |-
+                      Additional accepted `Host` patterns (same syntax as `host`); the route
+                      matches when any entry matches. Empty means no constraint beyond `host`.
+                    items:
+                      type: string
+                    type: array
+                  methods:
+                    default: []
+                    description: Allowed HTTP methods; empty means any method.
+                    items:
+                      type: string
+                    type: array
+                  path:
+                    description: Path pattern to match (e.g. `/api/*`); `None` matches any path.
+                    nullable: true
+                    type: string
+                type: object
+              policy:
+                description: Name of the [`PolicyConfig`] to execute; must exist or compilation fails.
+                type: string
+            required:
+            - match
+            - policy
+            title: RouteConfig
+            type: object
+          status:
+            description: Status of the six resource kinds.
+            properties:
+              conditions:
+                default: []
+                items:
+                  description: Condition contains details for one aspect of the current state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: lastTransitionTime is the last time the condition transitioned from one status to another. This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: message is a human readable message indicating details about the transition. This may be an empty string.
+                      type: string
+                    observedGeneration:
+                      description: observedGeneration represents the .metadata.generation that the condition was set based upon. For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date with respect to the current state of the instance.
+                      format: int64
+                      type: integer
+                    reason:
+                      description: reason contains a programmatic identifier indicating the reason for the condition's last transition. Producers of specific condition types may define expected values and meanings for this field, and whether the values are considered a guaranteed API. The value should be a CamelCase string. This field may not be empty.
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              gateways:
+                default: []
+                description: Gateways whose rendered config includes this object.
+                items:
+                  properties:
+                    name:
+                      type: string
+                    namespace:
+                      type: string
+                  required:
+                  - name
+                  - namespace
+                  type: object
+                type: array
+              observedGeneration:
+                format: int64
+                nullable: true
+                type: integer
+            title: ResourceStatus
+            type: object
+        required:
+        - spec
+        title: Route
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: policies.featherbit.io
+spec:
+  group: featherbit.io
+  names:
+    categories:
+    - featherbit
+    kind: Policy
+    plural: policies
+    shortNames:
+    - fbpolicy
+    singular: policy
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.conditions[?(@.type=="Accepted")].status
+      name: Accepted
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Programmed")].status
+      name: Programmed
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        properties:
+          spec:
+            description: |-
+              A node-graph policy: a named pipeline of plugin nodes wired by edges.
+
+              Compiled into a `CompiledGraph` at load/reload time; execution starts at
+              the `listener` node and follows each node's `success`/`error` ports.
+            properties:
+              edges:
+                default: []
+                description: Directed connections between node ports.
+                items:
+                  description: |-
+                    A directed edge between two node ports, written as `node_id.port`.
+
+                    Ports: `out`, `success`, `error` on the source side; `in` on the target
+                    side (e.g. `from: auth.success`, `to: upstream.in`).
+                  properties:
+                    from:
+                      description: Source endpoint, `node_id.port`.
+                      type: string
+                    to:
+                      description: Target endpoint, `node_id.port`.
+                      type: string
+                  required:
+                  - from
+                  - to
+                  type: object
+                type: array
+              error_handler:
+                description: Optional id of a node to jump to when a node errors without an explicit error edge.
+                nullable: true
+                type: string
+              nodes:
+                default: []
+                description: Plugin nodes making up the pipeline.
+                items:
+                  description: One plugin node in a policy graph.
+                  properties:
+                    config:
+                      additionalProperties: true
+                      default: {}
+                      description: Free-form plugin-specific configuration; defaults to empty.
+                      type: object
+                    config_ref:
+                      description: |-
+                        Optional name of a shared [`PluginConfigDef`] to inherit configuration
+                        from. The effective config is the shared config with this node's own
+                        `config` keys layered on top (shallow merge, local wins), materialized
+                        at compile time — the stored form always keeps the reference.
+                      nullable: true
+                      type: string
+                    id:
+                      description: Unique node id within the policy, referenced by edges as `id.port`.
+                      type: string
+                    position:
+                      description: |-
+                        Canvas coordinates for the Web UI node editor; ignored by the engine
+                        and omitted from serialized output when unset.
+                      nullable: true
+                      properties:
+                        x:
+                          format: double
+                          type: number
+                        "y":
+                          format: double
+                          type: number
+                      required:
+                      - x
+                      - "y"
+                      type: object
+                    type:
+                      description: |-
+                        Plugin type (YAML key: `type`), e.g. `upstream`, `key-auth`, `script`;
+                        must be one of the registered plugin types.
+                      type: string
+                  required:
+                  - id
+                  - type
+                  type: object
+                type: array
+            title: PolicyConfig
+            type: object
+          status:
+            description: Status of the six resource kinds.
+            properties:
+              conditions:
+                default: []
+                items:
+                  description: Condition contains details for one aspect of the current state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: lastTransitionTime is the last time the condition transitioned from one status to another. This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: message is a human readable message indicating details about the transition. This may be an empty string.
+                      type: string
+                    observedGeneration:
+                      description: observedGeneration represents the .metadata.generation that the condition was set based upon. For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date with respect to the current state of the instance.
+                      format: int64
+                      type: integer
+                    reason:
+                      description: reason contains a programmatic identifier indicating the reason for the condition's last transition. Producers of specific condition types may define expected values and meanings for this field, and whether the values are considered a guaranteed API. The value should be a CamelCase string. This field may not be empty.
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              gateways:
+                default: []
+                description: Gateways whose rendered config includes this object.
+                items:
+                  properties:
+                    name:
+                      type: string
+                    namespace:
+                      type: string
+                  required:
+                  - name
+                  - namespace
+                  type: object
+                type: array
+              observedGeneration:
+                format: int64
+                nullable: true
+                type: integer
+            title: ResourceStatus
+            type: object
+        required:
+        - spec
+        title: Policy
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: supernodes.featherbit.io
+spec:
+  group: featherbit.io
+  names:
+    categories:
+    - featherbit
+    kind: Supernode
+    plural: supernodes
+    shortNames:
+    - fbsupernode
+    singular: supernode
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.conditions[?(@.type=="Accepted")].status
+      name: Accepted
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Programmed")].status
+      name: Programmed
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        properties:
+          spec:
+            description: |-
+              A reusable named subgraph with a boundary of one `input`, one or more
+              `output`, and one or more `error` pseudo-nodes; each output/error node's
+              id is an instance port name (`output` = the `success` port; `error` =
+              the default error port) (declared in `nodes` like a policy declares
+              `listener`/`client`, so the UI can persist positions).
+
+              Instances appear in policies as nodes of `type: supernode` with
+              `config: { name: <this name> }` and are inlined at compile time —
+              stored configuration always keeps the compact reference form.
+            properties:
+              description:
+                description: Optional human-readable description (shown in the UI library).
+                nullable: true
+                type: string
+              edges:
+                default: []
+                description: |-
+                  Directed connections; boundary edges use `input.out`, `output.in`,
+                  `error.in` endpoints.
+                items:
+                  description: |-
+                    A directed edge between two node ports, written as `node_id.port`.
+
+                    Ports: `out`, `success`, `error` on the source side; `in` on the target
+                    side (e.g. `from: auth.success`, `to: upstream.in`).
+                  properties:
+                    from:
+                      description: Source endpoint, `node_id.port`.
+                      type: string
+                    to:
+                      description: Target endpoint, `node_id.port`.
+                      type: string
+                  required:
+                  - from
+                  - to
+                  type: object
+                type: array
+              nodes:
+                default: []
+                description: |-
+                  Inner plugin nodes plus the boundary pseudo-nodes: one `input`, one
+                  or more `output`, and one or more `error` pseudo-nodes; each
+                  output/error node's id is an instance port name (`output` = the
+                  `success` port; `error` = the default error port).
+                items:
+                  description: One plugin node in a policy graph.
+                  properties:
+                    config:
+                      additionalProperties: true
+                      default: {}
+                      description: Free-form plugin-specific configuration; defaults to empty.
+                      type: object
+                    config_ref:
+                      description: |-
+                        Optional name of a shared [`PluginConfigDef`] to inherit configuration
+                        from. The effective config is the shared config with this node's own
+                        `config` keys layered on top (shallow merge, local wins), materialized
+                        at compile time — the stored form always keeps the reference.
+                      nullable: true
+                      type: string
+                    id:
+                      description: Unique node id within the policy, referenced by edges as `id.port`.
+                      type: string
+                    position:
+                      description: |-
+                        Canvas coordinates for the Web UI node editor; ignored by the engine
+                        and omitted from serialized output when unset.
+                      nullable: true
+                      properties:
+                        x:
+                          format: double
+                          type: number
+                        "y":
+                          format: double
+                          type: number
+                      required:
+                      - x
+                      - "y"
+                      type: object
+                    type:
+                      description: |-
+                        Plugin type (YAML key: `type`), e.g. `upstream`, `key-auth`, `script`;
+                        must be one of the registered plugin types.
+                      type: string
+                  required:
+                  - id
+                  - type
+                  type: object
+                type: array
+            title: SupernodeConfig
+            type: object
+          status:
+            description: Status of the six resource kinds.
+            properties:
+              conditions:
+                default: []
+                items:
+                  description: Condition contains details for one aspect of the current state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: lastTransitionTime is the last time the condition transitioned from one status to another. This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: message is a human readable message indicating details about the transition. This may be an empty string.
+                      type: string
+                    observedGeneration:
+                      description: observedGeneration represents the .metadata.generation that the condition was set based upon. For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date with respect to the current state of the instance.
+                      format: int64
+                      type: integer
+                    reason:
+                      description: reason contains a programmatic identifier indicating the reason for the condition's last transition. Producers of specific condition types may define expected values and meanings for this field, and whether the values are considered a guaranteed API. The value should be a CamelCase string. This field may not be empty.
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              gateways:
+                default: []
+                description: Gateways whose rendered config includes this object.
+                items:
+                  properties:
+                    name:
+                      type: string
+                    namespace:
+                      type: string
+                  required:
+                  - name
+                  - namespace
+                  type: object
+                type: array
+              observedGeneration:
+                format: int64
+                nullable: true
+                type: integer
+            title: ResourceStatus
+            type: object
+        required:
+        - spec
+        title: Supernode
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: pluginconfigs.featherbit.io
+spec:
+  group: featherbit.io
+  names:
+    categories:
+    - featherbit
+    kind: PluginConfig
+    plural: pluginconfigs
+    shortNames:
+    - fbpluginconfig
+    singular: pluginconfig
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.conditions[?(@.type=="Accepted")].status
+      name: Accepted
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Programmed")].status
+      name: Programmed
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        properties:
+          spec:
+            description: |-
+              A named, shared plugin configuration, referenced by plugin nodes of the
+              matching type via [`NodeConfig::config_ref`]. Editing a shared config
+              re-resolves and recompiles every referencing policy atomically.
+            properties:
+              config:
+                additionalProperties: true
+                default: {}
+                description: The shared plugin configuration; same shape as [`NodeConfig::config`].
+                type: object
+              description:
+                description: Optional human-readable description (shown in the UI library).
+                nullable: true
+                type: string
+              type:
+                description: |-
+                  Plugin type this config is for (YAML key: `type`); only nodes of the
+                  same type may reference it.
+                type: string
+            required:
+            - type
+            title: PluginConfigDef
+            type: object
+          status:
+            description: Status of the six resource kinds.
+            properties:
+              conditions:
+                default: []
+                items:
+                  description: Condition contains details for one aspect of the current state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: lastTransitionTime is the last time the condition transitioned from one status to another. This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: message is a human readable message indicating details about the transition. This may be an empty string.
+                      type: string
+                    observedGeneration:
+                      description: observedGeneration represents the .metadata.generation that the condition was set based upon. For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date with respect to the current state of the instance.
+                      format: int64
+                      type: integer
+                    reason:
+                      description: reason contains a programmatic identifier indicating the reason for the condition's last transition. Producers of specific condition types may define expected values and meanings for this field, and whether the values are considered a guaranteed API. The value should be a CamelCase string. This field may not be empty.
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              gateways:
+                default: []
+                description: Gateways whose rendered config includes this object.
+                items:
+                  properties:
+                    name:
+                      type: string
+                    namespace:
+                      type: string
+                  required:
+                  - name
+                  - namespace
+                  type: object
+                type: array
+              observedGeneration:
+                format: int64
+                nullable: true
+                type: integer
+            title: ResourceStatus
+            type: object
+        required:
+        - spec
+        title: PluginConfig
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: stores.featherbit.io
+spec:
+  group: featherbit.io
+  names:
+    categories:
+    - featherbit
+    kind: Store
+    plural: stores
+    shortNames:
+    - fbstore
+    singular: store
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.conditions[?(@.type=="Accepted")].status
+      name: Accepted
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Programmed")].status
+      name: Programmed
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        properties:
+          spec:
+            description: |-
+              A named shared store: a redis/valkey connection referenced by name from
+              plugin config. Declared under top-level `stores:`. `url` and `password`
+              support `${ENV_VAR:-default}` placeholders, resolved only when the client
+              is built — the stored config (and everything the Admin API serves) keeps
+              the raw placeholder.
+            properties:
+              connect_budget_ms:
+                default: 5000
+                description: |-
+                  Total budget for establishing the first connection, covering every
+                  retry and the backoff between them.
+
+                  `connect_timeout_ms` bounds one attempt only, so without this the
+                  connection manager's retry schedule decides how long a request waits
+                  on an unreachable store -- tens of seconds with the crate defaults, on
+                  the first request after an outage begins. A failed connect is not
+                  cached, so the next request tries again.
+                format: uint64
+                minimum: 0.0
+                type: integer
+              connect_timeout_ms:
+                default: 2000
+                description: |-
+                  Connect/response timeout applied to the client and to `ping`. Bounds a
+                  single attempt; see `connect_budget_ms` for the total.
+                format: uint64
+                minimum: 0.0
+                type: integer
+              description:
+                description: Optional human-readable description (shown in the UI library).
+                nullable: true
+                type: string
+              key_prefix:
+                default: fb
+                description: Namespace prefix for every key this store writes.
+                type: string
+              password:
+                description: Optional password; overrides any password embedded in `url`.
+                nullable: true
+                type: string
+              tls:
+                description: TLS options for a `rediss://` store.
+                nullable: true
+                properties:
+                  ca_cert_path:
+                    description: PEM CA bundle for a private CA.
+                    nullable: true
+                    type: string
+                type: object
+              topology:
+                description: |-
+                  Reserved for HA topologies (`sentinel`/`cluster`); v1 accepts only
+                  `standalone` (the default) and rejects anything else at config load.
+                nullable: true
+                type: string
+              type:
+                description: |-
+                  Backend type (YAML key: `type`): `redis` or `valkey` — aliases for the
+                  same RESP backend.
+                type: string
+              url:
+                description: Connection URL (`redis://` or `rediss://`).
+                type: string
+              urls:
+                description: |-
+                  Reserved for HA topologies (sentinel/cluster endpoint lists); rejected
+                  at config load in v1.
+                items:
+                  type: string
+                nullable: true
+                type: array
+            required:
+            - type
+            - url
+            title: StoreConfig
+            type: object
+          status:
+            description: Status of the six resource kinds.
+            properties:
+              conditions:
+                default: []
+                items:
+                  description: Condition contains details for one aspect of the current state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: lastTransitionTime is the last time the condition transitioned from one status to another. This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: message is a human readable message indicating details about the transition. This may be an empty string.
+                      type: string
+                    observedGeneration:
+                      description: observedGeneration represents the .metadata.generation that the condition was set based upon. For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date with respect to the current state of the instance.
+                      format: int64
+                      type: integer
+                    reason:
+                      description: reason contains a programmatic identifier indicating the reason for the condition's last transition. Producers of specific condition types may define expected values and meanings for this field, and whether the values are considered a guaranteed API. The value should be a CamelCase string. This field may not be empty.
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              gateways:
+                default: []
+                description: Gateways whose rendered config includes this object.
+                items:
+                  properties:
+                    name:
+                      type: string
+                    namespace:
+                      type: string
+                  required:
+                  - name
+                  - namespace
+                  type: object
+                type: array
+              observedGeneration:
+                format: int64
+                nullable: true
+                type: integer
+            title: ResourceStatus
+            type: object
+        required:
+        - spec
+        title: Store
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: consumers.featherbit.io
+spec:
+  group: featherbit.io
+  names:
+    categories:
+    - featherbit
+    kind: Consumer
+    plural: consumers
+    shortNames:
+    - fbconsumer
+    singular: consumer
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.conditions[?(@.type=="Accepted")].status
+      name: Accepted
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Programmed")].status
+      name: Programmed
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        properties:
+          spec:
+            description: |-
+              A consumer as declared in `gateway.yaml` under `consumers:`.
+
+              ```yaml
+              consumers:
+                - name: alice
+                  group: partners
+                  labels: { custom_id: "42", tier: gold }
+                  credentials:
+                    key-auth: { key: "s3cret" }
+                    basic-auth: { username: alice, password: pw }
+              ```
+            properties:
+              credentials:
+                additionalProperties: true
+                default: {}
+                description: |-
+                  Per-auth-plugin credentials, keyed by plugin type
+                  (e.g. `key-auth: {key}`, `basic-auth: {username, password}`).
+                type: object
+              group:
+                description: Optional consumer group, exposed as `consumer.group` / `$consumer_group_id`.
+                nullable: true
+                type: string
+              labels:
+                additionalProperties:
+                  type: string
+                description: |-
+                  Free-form labels; `custom_id` is special-cased into the
+                  `X-Consumer-Custom-ID` header (matching APISIX).
+                type: object
+            title: ConsumerConfig
+            type: object
+          status:
+            description: Status of the six resource kinds.
+            properties:
+              conditions:
+                default: []
+                items:
+                  description: Condition contains details for one aspect of the current state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: lastTransitionTime is the last time the condition transitioned from one status to another. This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: message is a human readable message indicating details about the transition. This may be an empty string.
+                      type: string
+                    observedGeneration:
+                      description: observedGeneration represents the .metadata.generation that the condition was set based upon. For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date with respect to the current state of the instance.
+                      format: int64
+                      type: integer
+                    reason:
+                      description: reason contains a programmatic identifier indicating the reason for the condition's last transition. Producers of specific condition types may define expected values and meanings for this field, and whether the values are considered a guaranteed API. The value should be a CamelCase string. This field may not be empty.
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              gateways:
+                default: []
+                description: Gateways whose rendered config includes this object.
+                items:
+                  properties:
+                    name:
+                      type: string
+                    namespace:
+                      type: string
+                  required:
+                  - name
+                  - namespace
+                  type: object
+                type: array
+              observedGeneration:
+                format: int64
+                nullable: true
+                type: integer
+            title: ResourceStatus
+            type: object
+        required:
+        - spec
+        title: Consumer
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: featherbitgateways.featherbit.io
+spec:
+  group: featherbit.io
+  names:
+    categories:
+    - featherbit
+    kind: FeatherbitGateway
+    plural: featherbitgateways
+    shortNames:
+    - fbgw
+    singular: featherbitgateway
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - jsonPath: .status.counts.routes
+      name: Routes
+      type: integer
+    - jsonPath: .status.counts.policies
+      name: Policies
+      type: integer
+    - jsonPath: .status.configHash
+      name: Hash
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Auto-generated derived type for FeatherbitGatewaySpec via `CustomResource`
+        properties:
+          spec:
+            properties:
+              resources:
+                default:
+                  namespaces:
+                    from: Same
+                properties:
+                  namespaces:
+                    default:
+                      from: Same
+                    properties:
+                      from:
+                        default: Same
+                        enum:
+                        - Same
+                        - All
+                        - Selector
+                        type: string
+                      selector:
+                        description: A label selector is a label query over a set of resources. The result of matchLabels and matchExpressions are ANDed. An empty label selector matches all objects. A null label selector matches no objects.
+                        nullable: true
+                        properties:
+                          matchExpressions:
+                            description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                            items:
+                              description: A label selector requirement is a selector that contains values, a key, and an operator that relates the key and values.
+                              properties:
+                                key:
+                                  description: key is the label key that the selector applies to.
+                                  type: string
+                                operator:
+                                  description: operator represents a key's relationship to a set of values. Valid operators are In, NotIn, Exists and DoesNotExist.
+                                  type: string
+                                values:
+                                  description: values is an array of string values. If the operator is In or NotIn, the values array must be non-empty. If the operator is Exists or DoesNotExist, the values array must be empty. This array is replaced during a strategic merge patch.
+                                  items:
+                                    type: string
+                                  type: array
+                              required:
+                              - key
+                              - operator
+                              type: object
+                            type: array
+                          matchLabels:
+                            additionalProperties:
+                              type: string
+                            description: matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels map is equivalent to an element of matchExpressions, whose key field is "key", the operator is "In", and the values array contains only "value". The requirements are ANDed.
+                            type: object
+                        type: object
+                    type: object
+                  selector:
+                    description: Label selector on the resource objects themselves.
+                    nullable: true
+                    properties:
+                      matchExpressions:
+                        description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                        items:
+                          description: A label selector requirement is a selector that contains values, a key, and an operator that relates the key and values.
+                          properties:
+                            key:
+                              description: key is the label key that the selector applies to.
+                              type: string
+                            operator:
+                              description: operator represents a key's relationship to a set of values. Valid operators are In, NotIn, Exists and DoesNotExist.
+                              type: string
+                            values:
+                              description: values is an array of string values. If the operator is In or NotIn, the values array must be non-empty. If the operator is Exists or DoesNotExist, the values array must be empty. This array is replaced during a strategic merge patch.
+                              items:
+                                type: string
+                              type: array
+                          required:
+                          - key
+                          - operator
+                          type: object
+                        type: array
+                      matchLabels:
+                        additionalProperties:
+                          type: string
+                        description: matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels map is equivalent to an element of matchExpressions, whose key field is "key", the operator is "In", and the values array contains only "value". The requirements are ANDed.
+                        type: object
+                    type: object
+                type: object
+              sink:
+                description: Exactly one of the two must be set (checked by [`validate_spec`]).
+                properties:
+                  configMap:
+                    nullable: true
+                    properties:
+                      name:
+                        description: ConfigMap in the gateway's namespace; the operator owns its `gateway.yaml` key.
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  etcd:
+                    description: Mirrors the gateway's `EtcdConfig` (`config.etcd` chart values).
+                    nullable: true
+                    properties:
+                      credentialsSecretRef:
+                        description: Secret with keys `user` and `password` (same shape as the chart's `config.etcd.existingSecret`).
+                        nullable: true
+                        properties:
+                          name:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      endpoints:
+                        items:
+                          type: string
+                        type: array
+                      prefix:
+                        default: /featherbit
+                        type: string
+                      timeoutMs:
+                        default: 3000
+                        format: uint64
+                        minimum: 0.0
+                        type: integer
+                    required:
+                    - endpoints
+                    type: object
+                type: object
+            required:
+            - sink
+            type: object
+          status:
+            nullable: true
+            properties:
+              conditions:
+                default: []
+                items:
+                  description: Condition contains details for one aspect of the current state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: lastTransitionTime is the last time the condition transitioned from one status to another. This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: message is a human readable message indicating details about the transition. This may be an empty string.
+                      type: string
+                    observedGeneration:
+                      description: observedGeneration represents the .metadata.generation that the condition was set based upon. For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date with respect to the current state of the instance.
+                      format: int64
+                      type: integer
+                    reason:
+                      description: reason contains a programmatic identifier indicating the reason for the condition's last transition. Producers of specific condition types may define expected values and meanings for this field, and whether the values are considered a guaranteed API. The value should be a CamelCase string. This field may not be empty.
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              configHash:
+                nullable: true
+                type: string
+              counts:
+                default:
+                  consumers: 0
+                  excluded: 0
+                  pluginConfigs: 0
+                  policies: 0
+                  routes: 0
+                  stores: 0
+                  supernodes: 0
+                properties:
+                  consumers:
+                    format: uint32
+                    minimum: 0.0
+                    type: integer
+                  excluded:
+                    format: uint32
+                    minimum: 0.0
+                    type: integer
+                  pluginConfigs:
+                    format: uint32
+                    minimum: 0.0
+                    type: integer
+                  policies:
+                    format: uint32
+                    minimum: 0.0
+                    type: integer
+                  routes:
+                    format: uint32
+                    minimum: 0.0
+                    type: integer
+                  stores:
+                    format: uint32
+                    minimum: 0.0
+                    type: integer
+                  supernodes:
+                    format: uint32
+                    minimum: 0.0
+                    type: integer
+                required:
+                - consumers
+                - excluded
+                - pluginConfigs
+                - policies
+                - routes
+                - stores
+                - supernodes
+                type: object
+              lastRenderedAt:
+                description: Time is a wrapper around time.Time which supports correct marshaling to YAML and JSON.  Wrappers are provided for many of the factory methods that the time package offers.
+                format: date-time
+                nullable: true
+                type: string
+              observedGeneration:
+                format: int64
+                nullable: true
+                type: integer
+              sinkFingerprint:
+                description: |-
+                  sha256 of the `spec.sink` the last successful write targeted; a
+                  difference means the sink target changed and must be written again.
+                nullable: true
+                type: string
+            type: object
+        required:
+        - spec
+        title: FeatherbitGateway
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

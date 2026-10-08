@@ -1,0 +1,54 @@
+name: ci
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: fmt + clippy + test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets --locked -- -D warnings
+      - run: cargo test --locked
+
+  crds-in-sync:
+    name: generated CRDs match the chart
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo run --locked -- crds > /tmp/crds.yaml
+      - run: diff -u charts/featherbit-operator/crds/featherbit.io.yaml /tmp/crds.yaml
+
+  sbom:
+    name: CycloneDX SBOM (crate)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo install cargo-cyclonedx --locked
+      - run: |
+          cargo cyclonedx --format json --override-filename featherbit-operator.cdx --all
+          mkdir -p sbom && mv featherbit-operator.cdx.json sbom/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom-crate
+          path: sbom/

@@ -1,0 +1,11 @@
+# References a policy that does not exist: flagged ResolvedRefs=False
+# (PolicyNotFound) and left out of the render; other routes are unaffected.
+apiVersion: featherbit.io/v1alpha1
+kind: Route
+metadata:
+  name: orphan
+  namespace: shop
+spec:
+  match:
+    path: /orphan
+  policy: nope

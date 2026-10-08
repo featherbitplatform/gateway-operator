@@ -1,0 +1,8 @@
+/target
+/.superpowers/
+/.worktrees/
+/e2e/.kube
+/sast-out/
+/sbom/
+*.cdx.json
+/err.txt

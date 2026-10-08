@@ -1,0 +1,16 @@
+{{- if not .Values.webhook.certManager.enabled }}
+{{- $pair := include "featherbit-operator.webhookCA" . | fromJson }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "featherbit-operator.webhookSecretName" . }}
+  labels:
+    {{- include "featherbit-operator.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+type: kubernetes.io/tls
+data:
+  tls.crt: {{ $pair.crt }}
+  tls.key: {{ $pair.key }}
+  ca.crt: {{ $pair.ca }}
+{{- end }}

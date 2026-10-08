@@ -1,0 +1,14 @@
+# grype configuration — dependency/CVE scanning over the repo filesystem
+# (Cargo.lock) and the built container image.
+# High/critical findings fail the scan; lower severities are reported only.
+
+fail-on-severity: high
+
+exclude:
+  - ./target/**
+  - ./sast-out/**
+  - ./sbom/**
+  - ./.worktrees/**
+
+# Accepted findings, each with a comment explaining why.
+ignore: []

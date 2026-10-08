@@ -1,0 +1,3 @@
+# trivy ignore file, passed explicitly (`--ignorefile` in dev/sast.sh).
+# No accepted findings yet; add each with a `statement` explaining why.
+misconfigurations: []

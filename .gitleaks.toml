@@ -1,0 +1,15 @@
+# gitleaks configuration — secrets scanning. Extends the built-in default
+# ruleset; the allowlist below covers generated trees, not real secrets.
+# gitleaks auto-loads this file from the repo root.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Build outputs and local scanner output"
+paths = [
+    '''target/''',
+    '''sast-out/''',
+    '''sbom/''',
+    '''\.worktrees/''',
+]

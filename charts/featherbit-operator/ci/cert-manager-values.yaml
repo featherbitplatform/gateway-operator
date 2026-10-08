@@ -1,0 +1,11 @@
+# cert-manager path: lint/template only (needs the cert-manager and
+# prometheus-operator CRDs and a `selfsigned` Issuer to actually install).
+webhook:
+  certManager:
+    enabled: true
+    issuerRef:
+      name: selfsigned
+      kind: Issuer
+metrics:
+  serviceMonitor:
+    enabled: true
