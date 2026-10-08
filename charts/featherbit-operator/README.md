@@ -22,11 +22,20 @@ helm install featherbit-operator ... --set webhook.certManager.enabled=true \
 The Deployment uses `strategy: Recreate` (single replica, no leader election), so a rollout has a
 short window where `featherbit.io` creates/updates are rejected by the fail-closed webhook.
 
-`helm uninstall` keeps the webhook TLS Secret (`helm.sh/resource-policy: keep`). The `lookup` reuse
-applies to `helm upgrade`; a fresh `helm install` under the same release name renders a Secret with
-the same name, which Helm cannot adopt, so delete the kept Secret first. A different release name
-or `fullnameOverride` yields a different Secret name and generates a new pair, leaving the old
+`helm uninstall` keeps the webhook TLS Secret (`helm.sh/resource-policy: keep`). A reinstall
+under the same release name and namespace adopts it (Helm's ownership labels and annotations
+match) and `lookup` reuses the existing certificate pair. Only a different release name or
+`fullnameOverride` yields a different Secret name, generates a new pair and leaves the old
 Secret behind to delete manually.
+
+## Gateways the operator feeds
+
+This chart installs the operator only; gateways stay on the `featherbit-gateway` chart.
+
+- File mode: install the gateway chart with `config.gatewayConfigMap=<name>` and give the `FeatherbitGateway` `spec.sink.configMap.name: <name>`.
+- etcd mode: install the gateway chart with `config.source=etcd`, `config.etcd.endpoints` and `config.gateway: {}` (an empty seed, so a pod booting against an empty prefix seeds nothing; a non-empty seed is replaced by the first reconcile), and give the `FeatherbitGateway` `spec.sink.etcd` the same endpoints and prefix.
+
+Full walkthrough: https://featherbitplatform.github.io/gateway/operator/getting-started
 
 ## Values
 
