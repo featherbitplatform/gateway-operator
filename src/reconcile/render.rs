@@ -36,12 +36,22 @@ mod tests {
         assert_eq!(a.yaml, b.yaml);
         assert_eq!(a.hash, b.hash);
         assert_eq!(a.hash.len(), 64);
+        assert_eq!(a.hash, hex::encode(sha2::Sha256::digest(a.yaml.as_bytes())));
         assert!(a.yaml.starts_with("# Rendered by featherbit-operator"));
         let back: GatewayConfig = serde_yaml::from_str(&a.yaml).unwrap();
         assert_eq!(
             serde_json::to_value(&back).unwrap(),
             serde_json::to_value(&c).unwrap()
         );
+    }
+
+    #[test]
+    fn different_configs_hash_differently() {
+        let a = render(&cfg("routes: []"));
+        let b = render(&cfg(
+            "routes: [{ name: r, match: { path: /a }, policy: p }]",
+        ));
+        assert_ne!(a.hash, b.hash);
     }
 
     #[test]
