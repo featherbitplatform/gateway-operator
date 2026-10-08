@@ -983,7 +983,7 @@ checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
 [[package]]
 name = "featherbit"
 version = "0.15.0"
-source = "git+https://github.com/featherbitplatform/gateway?rev=4b8c24fed20fd8cf5f49a38c6d443f6d70c48f81#4b8c24fed20fd8cf5f49a38c6d443f6d70c48f81"
+source = "git+https://github.com/featherbitplatform/gateway?rev=328ec6d030711531ad93d8864c95565cb15e86d5#328ec6d030711531ad93d8864c95565cb15e86d5"
 dependencies = [
  "arc-swap",
  "async-trait",
