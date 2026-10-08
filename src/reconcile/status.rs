@@ -41,17 +41,26 @@ pub async fn patch_object(client: &Client, m: &MergedObjectStatus) -> Result<(),
         observed_generation: Some(m.obj.generation),
         gateways: m.gateways.clone(),
     };
+    patch_object_status(client, &m.obj, &status).await
+}
+
+/// Server-side-applies a fully computed status onto an object.
+pub async fn patch_object_status(
+    client: &Client,
+    obj: &ObjectRef,
+    status: &ResourceStatus,
+) -> Result<(), kube::Error> {
     let body = json!({
         "apiVersion": "featherbit.io/v1alpha1",
-        "kind": m.obj.kind.kind_str(),
-        "metadata": { "name": m.obj.name, "namespace": m.obj.namespace },
+        "kind": obj.kind.kind_str(),
+        "metadata": { "name": obj.name, "namespace": obj.namespace },
         "status": status,
     });
     let pp = PatchParams::apply(FIELD_MANAGER).force();
-    let ns = &m.obj.namespace;
-    let name = &m.obj.name;
+    let ns = &obj.namespace;
+    let name = &obj.name;
     let patch = Patch::Apply(&body);
-    match m.obj.kind {
+    match obj.kind {
         Kind::Route => Api::<Route>::namespaced(client.clone(), ns)
             .patch_status(name, &pp, &patch)
             .await

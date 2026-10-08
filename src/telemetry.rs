@@ -135,6 +135,15 @@ pub fn rendered_hash(gateway: &str, hash: &str) {
     m.rendered.with_label_values(&[gateway, hash]).set(1.0);
 }
 
+/// Removes every series of a gateway that no longer exists.
+pub fn forget_gateway(gateway: &str) {
+    let m = metrics();
+    if let Some(old) = m.last_hash.lock().unwrap().remove(gateway) {
+        let _ = m.rendered.remove_label_values(&[gateway, &old]);
+    }
+    excluded_clear(gateway);
+}
+
 pub fn webhook_observed(kind: &str, allowed: bool) {
     metrics()
         .webhook
