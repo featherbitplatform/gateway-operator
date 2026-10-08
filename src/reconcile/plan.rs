@@ -422,6 +422,9 @@ mod tests {
             (ready.status.as_str(), ready.reason.as_str()),
             ("False", REASON_INVALID_SPEC)
         );
+        assert_eq!(p.events.len(), 1);
+        assert_eq!(p.events[0].reason, "InvalidSpec");
+        assert!(p.events[0].obj.is_none());
     }
 
     #[test]
@@ -566,5 +569,69 @@ mod tests {
         assert_eq!(merged[0].conditions.len(), 1);
         assert_eq!(merged[0].conditions[0].reason, REASON_NOT_SELECTED);
         assert!(merged[0].gateways.is_empty());
+    }
+
+    #[test]
+    fn whole_compile_failure_is_not_ready_and_unprograms_objects() {
+        let dup = "credentials: { key-auth: { key: same } }";
+        let p = plan(input(
+            "sink: { configMap: { name: c } }",
+            vec![
+                c(Kind::Consumer, "gw", "a", dup),
+                c(Kind::Consumer, "gw", "b", dup),
+            ],
+            None,
+        ));
+        println!("gateway conditions: {:?}", p.gateway_conditions);
+        let ready = condition(&p.gateway_conditions, READY);
+        assert_eq!(
+            (ready.status.as_str(), ready.reason.as_str()),
+            ("False", REASON_COMPILE_FAILED)
+        );
+        assert!(p.write.is_none() && p.rendered.is_none());
+        assert_eq!(p.object_statuses.len(), 2);
+        for o in &p.object_statuses {
+            let pr = condition(&o.conditions, PROGRAMMED);
+            assert_eq!(
+                (pr.status.as_str(), pr.reason.as_str()),
+                ("False", REASON_GATEWAY_NOT_READY)
+            );
+            assert!(o.programmed_by.is_none());
+        }
+        assert!(p
+            .events
+            .iter()
+            .any(|e| e.reason == "CompileFailed" && e.warning && e.obj.is_none()));
+    }
+
+    #[test]
+    fn invalid_object_gets_accepted_false_and_programmed_excluded() {
+        let bad = POLICY_OK.replace("type: client", "type: no-such-node");
+        let p = plan(input(
+            "sink: { configMap: { name: c } }",
+            vec![c(Kind::Policy, "gw", "bad", &bad)],
+            None,
+        ));
+        let o = p
+            .object_statuses
+            .iter()
+            .find(|o| o.obj.name == "bad")
+            .unwrap();
+        let a = condition(&o.conditions, ACCEPTED);
+        assert_eq!(
+            (a.status.as_str(), a.reason.as_str()),
+            ("False", REASON_INVALID)
+        );
+        let pr = condition(&o.conditions, PROGRAMMED);
+        assert_eq!(
+            (pr.status.as_str(), pr.reason.as_str()),
+            ("False", REASON_EXCLUDED)
+        );
+        assert!(o.conditions.iter().all(|c| c.type_ != RESOLVED_REFS));
+        assert!(o.programmed_by.is_none());
+        assert!(p
+            .events
+            .iter()
+            .any(|e| e.warning && e.obj.as_ref().map(|o| o.name.as_str()) == Some("bad")));
     }
 }
