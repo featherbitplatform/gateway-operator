@@ -50,9 +50,7 @@ license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
 [bans]
 # Duplicate crate versions surface as warnings so NEW dupes stay visible.
 multiple-versions = "warn"
-# The featherbit git dependency is pinned by `rev` and has no version
-# requirement, which cargo-deny reports as a wildcard; warn instead of deny.
-wildcards = "warn"
+wildcards = "deny"
 
 [sources]
 unknown-registry = "deny"

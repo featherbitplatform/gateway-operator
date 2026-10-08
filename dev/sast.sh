@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Note: CI's semgrep job is report-only (`|| true`, per plan); this local run gates on ERROR.
 # Local SAST pipeline - the same scanners and thresholds as
 # .github/workflows/security.yml, run via Docker (plus native cargo-deny and
 # cargo-cyclonedx).
@@ -21,12 +22,13 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # Docker Desktop on Windows (Git Bash) must not rewrite container paths.
 export MSYS_NO_PATHCONV=1
 
-# Tool images, pinned so local results match across machines. Bump deliberately.
-SEMGREP_IMAGE='semgrep/semgrep:1.97.0'
+# Tool images: semgrep, gitleaks and trivy track :latest like the gateway's
+# sast.ps1 and CI; grype, hadolint and syft are pinned.
+SEMGREP_IMAGE='semgrep/semgrep:latest'
 GRYPE_IMAGE='anchore/grype:v0.87.0'
 HADOLINT_IMAGE='hadolint/hadolint:v2.12.0-alpine'
-GITLEAKS_IMAGE='zricethezav/gitleaks:v8.21.2'
-TRIVY_IMAGE='aquasec/trivy:0.58.1'
+GITLEAKS_IMAGE='zricethezav/gitleaks:latest'
+TRIVY_IMAGE='aquasec/trivy:latest'
 SYFT_IMAGE='anchore/syft:v1.18.1'
 
 # Semgrep registry rulesets - keep in sync with the semgrep job in security.yml.

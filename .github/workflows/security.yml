@@ -55,11 +55,19 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+
+      # Container instead of gitleaks-action: the action needs a paid license
+      # for organization-owned repositories. Same invocation as dev/sast.sh.
+      - run: >-
+          docker run --rm -v "$PWD:/src" zricethezav/gitleaks:latest
+          dir /src --config /src/.gitleaks.toml --no-banner --redact
+          --report-format sarif --report-path /src/gitleaks.sarif
+
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
         with:
-          fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          sarif_file: gitleaks.sarif
+          category: gitleaks
 
   hadolint:
     runs-on: ubuntu-24.04
@@ -101,7 +109,7 @@ jobs:
         with:
           sarif_file: ${{ steps.grype.outputs.sarif }}
           category: grype-image
-      - uses: aquasecurity/trivy-action@0.36.0
+      - uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: featherbit-operator:sast
           format: sarif
