@@ -4,7 +4,11 @@ kind: Pod
 metadata:
   name: {{ include "featherbit-operator.fullname" . }}-test
   labels:
-    {{- include "featherbit-operator.labels" . | nindent 4 }}
+    helm.sh/chart: {{ include "featherbit-operator.chart" . }}
+    app.kubernetes.io/name: {{ include "featherbit-operator.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: test
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
   annotations:
     helm.sh/hook: test
     helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded

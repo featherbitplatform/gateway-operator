@@ -19,6 +19,15 @@ helm install featherbit-operator ... --set webhook.certManager.enabled=true \
   --set webhook.certManager.issuerRef.name=<issuer>
 ```
 
+The Deployment uses `strategy: Recreate` (single replica, no leader election), so a rollout has a
+short window where `featherbit.io` creates/updates are rejected by the fail-closed webhook.
+
+`helm uninstall` keeps the webhook TLS Secret (`helm.sh/resource-policy: keep`). The `lookup` reuse
+applies to `helm upgrade`; a fresh `helm install` under the same release name renders a Secret with
+the same name, which Helm cannot adopt, so delete the kept Secret first. A different release name
+or `fullnameOverride` yields a different Secret name and generates a new pair, leaving the old
+Secret behind to delete manually.
+
 ## Values
 
 | Key | Default | Description |

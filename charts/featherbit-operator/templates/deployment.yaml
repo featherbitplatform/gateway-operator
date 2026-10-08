@@ -38,7 +38,14 @@ spec:
         - name: operator
           image: {{ include "featherbit-operator.image" . | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          args: ["run", "--log-format", {{ .Values.logging.format | quote }}]
+          args:
+            - run
+            - --log-format
+            - {{ .Values.logging.format | quote }}
+            - --webhook-addr
+            - {{ printf "0.0.0.0:%v" .Values.webhook.port | quote }}
+            - --metrics-addr
+            - {{ printf "0.0.0.0:%v" .Values.metrics.port | quote }}
           env:
             - name: RUST_LOG
               value: {{ .Values.logging.level | quote }}

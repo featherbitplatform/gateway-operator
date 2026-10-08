@@ -14,6 +14,7 @@ for k in Route Policy Supernode PluginConfig Store Consumer FeatherbitGateway; d
 done
 grep -q 'readOnlyRootFilesystem: true' <<<"$out" || fail "security context missing"
 grep -q 'runAsUser: 65532' <<<"$out" || fail "nonroot uid missing"
+grep -q -e '--webhook-addr' <<<"$out" && grep -q '0.0.0.0:9443' <<<"$out" || fail "webhook addr arg missing"
 grep -q 'containerPort: 9443' <<<"$out" || fail "webhook port missing"
 grep -q 'path: /readyz' <<<"$out" || fail "readiness probe missing"
 grep -q 'kind: ClusterRole' <<<"$out" || fail "ClusterRole missing"
