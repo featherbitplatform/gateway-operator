@@ -9,6 +9,9 @@
 #                          once a release contains config.gatewayConfigMap; ignored for a path.
 #   GATEWAY_IMAGE_TAG      gateway image tag (edge is published on gateway develop pushes)
 set -euo pipefail
+# Git Bash (Windows) rewrites arguments that look like POSIX paths, which turned
+# `--set config.etcd.prefix=/e2e` into `C:/Program Files/Git/e2e`. No-op elsewhere.
+export MSYS_NO_PATHCONV=1
 cd "$(dirname "$0")/.."
 CLUSTER=${CLUSTER:-fb-operator-e2e}
 # Default: sibling checkout of the gateway repo on develop (override with the path of a develop checkout).
