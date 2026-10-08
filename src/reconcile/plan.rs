@@ -7,7 +7,9 @@ use featherbit::config::GatewayConfig;
 use k8s_openapi::api::core::v1::Namespace;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition;
 
-use crate::crd::gateway::{validate_spec, Counts, FeatherbitGatewaySpec};
+use sha2::{Digest, Sha256};
+
+use crate::crd::gateway::{validate_spec, Counts, FeatherbitGatewaySpec, SinkSpec};
 use crate::crd::status::*;
 use crate::reconcile::render::{render, Rendered};
 use crate::reconcile::select::{admitted_namespaces, select, Candidate, Exclusion, ObjectRef};
@@ -18,6 +20,7 @@ pub struct GatewayId {
     pub namespace: String,
     pub name: String,
     pub generation: i64,
+    pub created: Option<k8s_openapi::jiff::Timestamp>,
 }
 
 impl GatewayId {
@@ -35,6 +38,75 @@ pub struct Input {
     pub namespaces: Vec<Namespace>,
     pub candidates: Vec<Candidate>,
     pub previous_hash: Option<String>,
+    /// [`sink_fingerprint`] of the current `spec.sink`.
+    pub sink_fingerprint: String,
+    /// `status.sinkFingerprint` as last stored.
+    pub previous_sink_fingerprint: Option<String>,
+    /// The sink no longer holds what the last write put there (ConfigMap
+    /// missing or edited, or an etcd re-apply is due).
+    pub sink_drifted: bool,
+    /// Set when another gateway owns the same sink (see [`sink_conflict`]).
+    pub sink_conflict: Option<String>,
+    /// Objects this gateway last reported as programmed; they stay in the sink
+    /// while the gateway is not ready, so they report `GatewayNotReady`.
+    pub previously_programmed: Vec<ObjectRef>,
+}
+
+/// sha256 of the serialized `spec.sink`: changes whenever the write target does.
+pub fn sink_fingerprint(sink: &SinkSpec) -> String {
+    let json = serde_json::to_string(sink).expect("SinkSpec serializes");
+    hex::encode(Sha256::digest(json.as_bytes()))
+}
+
+fn path_nested(a: &str, b: &str) -> bool {
+    let (a, b) = (a.trim_end_matches('/'), b.trim_end_matches('/'));
+    a == b || b.starts_with(&format!("{a}/")) || a.starts_with(&format!("{b}/"))
+}
+
+/// Plan ruling: two gateways must not share a sink. A conflict is the
+/// same namespace and ConfigMap name, or a shared etcd endpoint with equal or
+/// nested prefixes. The older gateway (creationTimestamp, then namespace/name)
+/// keeps writing; the newer one gets the returned message and writes nothing.
+pub fn sink_conflict(
+    me: &GatewayId,
+    mine: &SinkSpec,
+    others: &[(GatewayId, SinkSpec)],
+) -> Option<String> {
+    let rank = |g: &GatewayId| (g.created, g.namespace.clone(), g.name.clone());
+    for (other, theirs) in others {
+        if other.namespace == me.namespace && other.name == me.name {
+            continue;
+        }
+        if rank(other) >= rank(me) {
+            continue; // I am the older one; the other gateway yields.
+        }
+        let clash = match (
+            &mine.config_map,
+            &theirs.config_map,
+            &mine.etcd,
+            &theirs.etcd,
+        ) {
+            (Some(a), Some(b), _, _) => (me.namespace == other.namespace && a.name == b.name)
+                .then(|| format!("ConfigMap {}/{}", me.namespace, a.name)),
+            (_, _, Some(a), Some(b)) => {
+                let ep = |s: &str| s.trim_end_matches('/').to_ascii_lowercase();
+                let shared = a
+                    .endpoints
+                    .iter()
+                    .any(|x| b.endpoints.iter().any(|y| ep(x) == ep(y)));
+                (shared && path_nested(&a.prefix, &b.prefix))
+                    .then(|| format!("etcd prefix {} (other: {})", a.prefix, b.prefix))
+            }
+            _ => None,
+        };
+        if let Some(what) = clash {
+            return Some(format!(
+                "spec.sink: {what} is already written by older gateway {}/{}; each gateway needs its own sink",
+                other.namespace, other.name
+            ));
+        }
+    }
+    None
 }
 
 #[derive(Clone, Debug)]
@@ -69,14 +141,22 @@ pub fn plan(input: Input) -> Plan {
     let me = input.gateway.as_ref();
     let mut events = Vec::new();
 
-    if let Err(e) = validate_spec(&input.spec) {
+    if let Some(e) = validate_spec(&input.spec)
+        .err()
+        .or_else(|| input.sink_conflict.clone())
+    {
+        let object_statuses = input
+            .previously_programmed
+            .iter()
+            .map(|obj| not_ready_status(obj, &me, "gateway spec is invalid"))
+            .collect();
         return Plan {
             write: None,
             rendered: None,
             config: crate::validators::empty_config(),
             gateway_conditions: vec![cond(READY, false, REASON_INVALID_SPEC, &e, gen)],
             counts: Counts::default(),
-            object_statuses: vec![],
+            object_statuses,
             events: vec![EventSpec {
                 obj: None,
                 reason: REASON_INVALID_SPEC.into(),
@@ -128,7 +208,12 @@ pub fn plan(input: Input) -> Plan {
         plugin_configs: v.config.plugin_configs.len() as u32,
         stores: v.config.stores.len() as u32,
         consumers: v.config.consumers.len() as u32,
-        excluded: v.excluded.len() as u32,
+        excluded: (selection
+            .excluded
+            .iter()
+            .filter(|e| e.reason != REASON_NOT_SELECTED)
+            .count()
+            + v.excluded.len()) as u32,
     };
 
     if let Err(e) = &v.whole_compile {
@@ -168,7 +253,10 @@ pub fn plan(input: Input) -> Plan {
     }
 
     let rendered = render(&v.config);
-    let write = if input.previous_hash.as_deref() == Some(rendered.hash.as_str()) {
+    let up_to_date = input.previous_hash.as_deref() == Some(rendered.hash.as_str())
+        && input.previous_sink_fingerprint.as_deref() == Some(input.sink_fingerprint.as_str())
+        && !input.sink_drifted;
+    let write = if up_to_date {
         None
     } else {
         Some(rendered.clone())
@@ -181,6 +269,20 @@ pub fn plan(input: Input) -> Plan {
         counts,
         object_statuses,
         events,
+    }
+}
+
+fn not_ready_status(obj: &ObjectRef, me: &GatewayRef, why: &str) -> ObjectStatusUpdate {
+    let g = obj.generation;
+    ObjectStatusUpdate {
+        obj: obj.clone(),
+        conditions: vec![
+            cond(ACCEPTED, true, REASON_VALID, "", g),
+            cond(RESOLVED_REFS, true, REASON_RESOLVED, "", g),
+            cond(PROGRAMMED, false, REASON_GATEWAY_NOT_READY, why, g),
+        ],
+        programmed_by: None,
+        gateway: me.clone(),
     }
 }
 
@@ -335,13 +437,21 @@ mod tests {
                 namespace: "gw".into(),
                 name: "edge".into(),
                 generation: 7,
+                created: None,
             },
             spec: serde_yaml::from_str(spec_yaml).unwrap(),
             namespaces: vec![],
             candidates,
             previous_hash: previous_hash.map(String::from),
+            sink_fingerprint: FP.into(),
+            previous_sink_fingerprint: Some(FP.into()),
+            sink_drifted: false,
+            sink_conflict: None,
+            previously_programmed: vec![],
         }
     }
+
+    const FP: &str = "fp-1";
 
     fn condition<'a>(conds: &'a [Condition], t: &str) -> &'a Condition {
         conds
@@ -632,5 +742,220 @@ mod tests {
             .events
             .iter()
             .any(|e| e.warning && e.obj.as_ref().map(|o| o.name.as_str()) == Some("bad")));
+    }
+
+    fn healthy_with(f: impl FnOnce(&mut Input)) -> Plan {
+        let first = plan(input(
+            "sink: { configMap: { name: c } }",
+            vec![c(Kind::Policy, "gw", "p", POLICY_OK)],
+            None,
+        ));
+        let hash = first.rendered.unwrap().hash;
+        let mut i = input(
+            "sink: { configMap: { name: c } }",
+            vec![c(Kind::Policy, "gw", "p", POLICY_OK)],
+            Some(&hash),
+        );
+        f(&mut i);
+        plan(i)
+    }
+
+    #[test]
+    fn changed_sink_fingerprint_forces_a_write() {
+        let p = healthy_with(|i| i.previous_sink_fingerprint = Some("old".into()));
+        assert!(p.write.is_some());
+        let p = healthy_with(|i| i.previous_sink_fingerprint = None);
+        assert!(p.write.is_some());
+    }
+
+    #[test]
+    fn drifted_sink_forces_a_write() {
+        let p = healthy_with(|i| i.sink_drifted = true);
+        assert!(p.write.is_some());
+    }
+
+    #[test]
+    fn same_hash_same_fingerprint_not_drifted_does_not_write() {
+        let p = healthy_with(|_| {});
+        assert!(p.write.is_none());
+    }
+
+    fn spec_of(y: &str) -> SinkSpec {
+        serde_yaml::from_str(&format!("{{ {y} }}")).unwrap()
+    }
+
+    #[test]
+    fn sink_fingerprint_tracks_the_target() {
+        let a = sink_fingerprint(&spec_of("configMap: { name: a }"));
+        assert_eq!(a, sink_fingerprint(&spec_of("configMap: { name: a }")));
+        assert_ne!(a, sink_fingerprint(&spec_of("configMap: { name: b }")));
+        assert_ne!(
+            sink_fingerprint(&spec_of("etcd: { endpoints: ['http://e:2379'] }")),
+            sink_fingerprint(&spec_of(
+                "etcd: { endpoints: ['http://e:2379'], prefix: /other }"
+            ))
+        );
+    }
+
+    fn gid(ns: &str, name: &str, created: Option<i64>) -> GatewayId {
+        GatewayId {
+            namespace: ns.into(),
+            name: name.into(),
+            generation: 1,
+            created: created.map(|s| k8s_openapi::jiff::Timestamp::from_second(s).unwrap()),
+        }
+    }
+
+    #[test]
+    fn configmap_sink_conflict_older_gateway_wins() {
+        let old = (gid("gw", "old", Some(1)), spec_of("configMap: { name: c }"));
+        let new = (gid("gw", "new", Some(2)), spec_of("configMap: { name: c }"));
+        let msg = sink_conflict(&new.0, &new.1, std::slice::from_ref(&old)).unwrap();
+        assert!(
+            msg.contains("gw/old") && msg.contains("ConfigMap gw/c"),
+            "{msg}"
+        );
+        assert_eq!(
+            sink_conflict(&old.0, &old.1, std::slice::from_ref(&new)),
+            None
+        );
+        assert_eq!(
+            sink_conflict(&old.0, &old.1, std::slice::from_ref(&old)),
+            None
+        );
+    }
+
+    #[test]
+    fn configmap_sink_conflict_needs_same_namespace_and_name() {
+        let other_ns = (
+            gid("other", "old", Some(1)),
+            spec_of("configMap: { name: c }"),
+        );
+        let other_name = (gid("gw", "old", Some(1)), spec_of("configMap: { name: d }"));
+        let me = gid("gw", "new", Some(2));
+        let mine = spec_of("configMap: { name: c }");
+        assert_eq!(sink_conflict(&me, &mine, &[other_ns, other_name]), None);
+    }
+
+    #[test]
+    fn etcd_sink_conflict_on_shared_endpoint_with_nested_prefixes() {
+        let e = "http://e:2379";
+        let old = (
+            gid("a", "old", Some(1)),
+            spec_of(&format!("etcd: {{ endpoints: ['{e}'], prefix: /fb }}")),
+        );
+        let me = gid("b", "new", Some(2));
+        for (prefix, expect) in [
+            ("/fb", true),
+            ("/fb/b", true),
+            ("/fbx", false),
+            ("/other", false),
+        ] {
+            let mine = spec_of(&format!("etcd: {{ endpoints: ['{e}'], prefix: {prefix} }}"));
+            assert_eq!(
+                sink_conflict(&me, &mine, std::slice::from_ref(&old)).is_some(),
+                expect,
+                "{prefix}"
+            );
+        }
+        let elsewhere = spec_of("etcd: { endpoints: ['http://z:2379'], prefix: /fb }");
+        assert_eq!(
+            sink_conflict(&me, &elsewhere, std::slice::from_ref(&old)),
+            None
+        );
+        let cm = spec_of("configMap: { name: c }");
+        assert_eq!(sink_conflict(&me, &cm, std::slice::from_ref(&old)), None);
+    }
+
+    #[test]
+    fn conflict_tie_breaks_on_namespace_then_name() {
+        let a = (gid("gw", "a", Some(1)), spec_of("configMap: { name: c }"));
+        let b = (gid("gw", "b", Some(1)), spec_of("configMap: { name: c }"));
+        assert!(sink_conflict(&b.0, &b.1, std::slice::from_ref(&a)).is_some());
+        assert!(sink_conflict(&a.0, &a.1, std::slice::from_ref(&b)).is_none());
+    }
+
+    #[test]
+    fn sink_conflict_makes_the_gateway_not_ready_and_writes_nothing() {
+        let first = plan(input(
+            "sink: { configMap: { name: c } }",
+            vec![c(Kind::Policy, "gw", "p", POLICY_OK)],
+            None,
+        ));
+        let programmed = first.object_statuses[0].obj.clone();
+        let mut i = input(
+            "sink: { configMap: { name: c } }",
+            vec![c(Kind::Policy, "gw", "p", POLICY_OK)],
+            None,
+        );
+        i.sink_conflict = Some("spec.sink: clash with gw/old".into());
+        i.previously_programmed = vec![programmed];
+        let p = plan(i);
+        assert!(p.write.is_none() && p.rendered.is_none());
+        let ready = condition(&p.gateway_conditions, READY);
+        assert_eq!(
+            (ready.status.as_str(), ready.reason.as_str()),
+            ("False", REASON_INVALID_SPEC)
+        );
+        assert!(ready.message.contains("gw/old"));
+        assert!(p.events.iter().any(|e| e.warning && e.obj.is_none()));
+        let o = &p.object_statuses[0];
+        let pr = condition(&o.conditions, PROGRAMMED);
+        assert_eq!(
+            (pr.status.as_str(), pr.reason.as_str()),
+            ("False", REASON_GATEWAY_NOT_READY)
+        );
+        assert!(o.programmed_by.is_none());
+    }
+
+    #[test]
+    fn invalid_spec_marks_previously_programmed_objects_gateway_not_ready() {
+        let obj = ObjectRef {
+            kind: Kind::Route,
+            namespace: "gw".into(),
+            name: "r".into(),
+            uid: "u".into(),
+            generation: 4,
+            created: None,
+        };
+        let mut i = input("sink: {}", vec![], None);
+        i.previously_programmed = vec![obj];
+        let p = plan(i);
+        assert_eq!(p.object_statuses.len(), 1);
+        let pr = condition(&p.object_statuses[0].conditions, PROGRAMMED);
+        assert_eq!(pr.reason, REASON_GATEWAY_NOT_READY);
+        assert_eq!(pr.observed_generation, Some(4));
+    }
+
+    #[test]
+    fn counts_excluded_includes_conflict_losers_but_not_unselected() {
+        let p = plan(input(
+            "sink: { configMap: { name: c } }",
+            vec![
+                c(Kind::Policy, "gw", "p", POLICY_OK),
+                c(Kind::Policy, "other-ns", "q", POLICY_OK),
+            ],
+            None,
+        ));
+        assert_eq!(p.counts.excluded, 0, "unselected objects are not excluded");
+        let mut i = input(
+            "sink: { configMap: { name: c } }\nresources: { namespaces: { from: All } }",
+            vec![
+                c(Kind::Policy, "gw", "dup", POLICY_OK),
+                c(Kind::Policy, "other-ns", "dup", POLICY_OK),
+            ],
+            None,
+        );
+        i.namespaces = ["gw", "other-ns"]
+            .iter()
+            .map(|n| {
+                let mut ns = Namespace::default();
+                ns.metadata.name = Some(n.to_string());
+                ns
+            })
+            .collect();
+        let p = plan(i);
+        assert_eq!(p.counts.excluded, 1);
+        assert_eq!(p.counts.policies, 1);
     }
 }

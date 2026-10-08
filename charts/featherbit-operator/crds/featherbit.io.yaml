@@ -1189,6 +1189,12 @@ spec:
                 format: int64
                 nullable: true
                 type: integer
+              sinkFingerprint:
+                description: |-
+                  sha256 of the `spec.sink` the last successful write targeted; a
+                  difference means the sink target changed and must be written again.
+                nullable: true
+                type: string
             type: object
         required:
         - spec

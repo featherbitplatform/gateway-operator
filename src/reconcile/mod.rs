@@ -6,7 +6,7 @@ pub mod select;
 pub mod status;
 pub mod verdict;
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -21,13 +21,13 @@ use kube::runtime::reflector::{self, ObjectRef as KubeObjectRef, Store};
 use kube::runtime::{watcher, WatchStreamExt};
 use kube::{Api, Client, Resource, ResourceExt};
 
-use crate::crd::gateway::{FeatherbitGateway, GatewayStatus};
+use crate::crd::gateway::{validate_spec, FeatherbitGateway, GatewayStatus, SinkSpec};
 use crate::crd::resources::{
     Consumer, Kind, PluginConfig, Policy, Route, Store as StoreCr, Supernode,
 };
 use crate::crd::status::{
-    cond, set_condition, ResourceStatus, PROGRAMMED, READY, REASON_NOT_SELECTED,
-    REASON_SINK_UNAVAILABLE,
+    cond, set_condition, ResourceStatus, PROGRAMMED, READY, REASON_GATEWAY_NOT_READY,
+    REASON_NOT_SELECTED, REASON_PROGRAMMED, REASON_SINK_UNAVAILABLE,
 };
 use crate::reconcile::plan::{
     merge_object_statuses, plan, EventSpec, GatewayId, Input, MergedObjectStatus,
@@ -62,6 +62,13 @@ pub struct Context {
     pub plugin_configs: Store<PluginConfig>,
     pub stores: Store<StoreCr>,
     pub consumers: Store<Consumer>,
+    /// ConfigMaps the operator manages, for sink drift detection.
+    pub configmaps: Store<ConfigMap>,
+    /// When this process last applied each etcd-sink gateway (key `ns/name`);
+    /// etcd is not watched, so a re-apply is due every [`REQUEUE_OK`].
+    pub etcd_applied: std::sync::Mutex<HashMap<String, Instant>>,
+    /// Consecutive failed reconciles per gateway (key `ns/name`), for backoff.
+    pub attempts: std::sync::Mutex<HashMap<String, u32>>,
     /// Last per-gateway object statuses, for the cross-gateway merge.
     pub last_object_statuses: tokio::sync::Mutex<BTreeMap<String, Vec<ObjectStatusUpdate>>>,
     /// Objects covered by the previous merge, so objects that drop out of every
@@ -70,6 +77,15 @@ pub struct Context {
 }
 
 impl Context {
+    fn etcd_reapply_due(&self, key: &str) -> bool {
+        self.etcd_applied
+            .lock()
+            .expect("etcd_applied lock")
+            .get(key)
+            .map(|t| t.elapsed() >= REQUEUE_OK)
+            .unwrap_or(true)
+    }
+
     fn candidates(&self) -> Vec<Candidate> {
         let mut out = Vec::new();
         out.extend(
@@ -160,6 +176,15 @@ pub fn next_status(
 
 pub const REQUEUE_OK: Duration = Duration::from_secs(600);
 
+const BACKOFF_BASE: Duration = Duration::from_secs(30);
+const BACKOFF_CAP: Duration = Duration::from_secs(300);
+
+/// Delay before retry number `attempt` (0-based): 30 s doubling, capped at 300 s.
+pub fn backoff_delay(attempt: u32) -> Duration {
+    let factor = 1u32.checked_shl(attempt.min(16)).unwrap_or(u32::MAX);
+    BACKOFF_BASE.saturating_mul(factor).min(BACKOFF_CAP)
+}
+
 /// Merges every live gateway's last verdicts, patches the objects whose status
 /// changed, gives objects that dropped out of every view a final
 /// `Programmed=False/NotSelected`, and returns the objects patched.
@@ -228,7 +253,10 @@ async fn publish_objects(ctx: &Context) -> BTreeSet<ObjKey> {
 pub async fn reconcile(gw: Arc<FeatherbitGateway>, ctx: Arc<Context>) -> Result<Action, Error> {
     let started = Instant::now();
     let key = format!("{}/{}", gw.namespace().unwrap_or_default(), gw.name_any());
-    let r = reconcile_inner(gw, ctx, &key, started).await;
+    let r = reconcile_inner(gw, ctx.clone(), &key, started).await;
+    if r.is_ok() {
+        ctx.attempts.lock().expect("attempts lock").remove(&key);
+    }
     if let Err(Error::Kube(_)) = &r {
         telemetry::reconcile_observed(&key, "kube_error", started.elapsed().as_secs_f64());
     }
@@ -251,12 +279,68 @@ async fn reconcile_inner(
     let previous_status = gw.status.clone().unwrap_or_default();
     let previous_hash = previous_status.config_hash.clone();
 
+    let me = GatewayId {
+        namespace: ns.clone(),
+        name: name.clone(),
+        generation,
+        created: gw.metadata.creation_timestamp.as_ref().map(|t| t.0),
+    };
+    let sink_fingerprint = plan::sink_fingerprint(&gw.spec.sink);
+    let others: Vec<(GatewayId, SinkSpec)> = ctx
+        .gateways
+        .state()
+        .iter()
+        .filter(|g| validate_spec(&g.spec).is_ok())
+        .map(|g| {
+            (
+                GatewayId {
+                    namespace: g.namespace().unwrap_or_default(),
+                    name: g.name_any(),
+                    generation: g.metadata.generation.unwrap_or(0),
+                    created: g.metadata.creation_timestamp.as_ref().map(|t| t.0),
+                },
+                g.spec.sink.clone(),
+            )
+        })
+        .collect();
+    let sink_conflict = plan::sink_conflict(&me, &gw.spec.sink, &others);
+    let sink_drifted = match (&gw.spec.sink.config_map, &gw.spec.sink.etcd) {
+        (Some(cm), _) => {
+            let found = ctx
+                .configmaps
+                .get(&KubeObjectRef::new(&cm.name).within(&ns));
+            sink::configmap::is_drifted(found.as_deref(), previous_hash.as_deref())
+        }
+        (None, Some(_)) => ctx.etcd_reapply_due(key),
+        _ => false,
+    };
+    let previously_programmed: Vec<ObjectRef> = ctx
+        .last_object_statuses
+        .lock()
+        .await
+        .get(key)
+        .map(|updates| {
+            updates
+                .iter()
+                .filter(|u| {
+                    u.conditions.iter().any(|c| {
+                        c.type_ == PROGRAMMED
+                            && (c.reason == REASON_PROGRAMMED
+                                || c.reason == REASON_GATEWAY_NOT_READY)
+                    })
+                })
+                .map(|u| u.obj.clone())
+                .collect()
+        })
+        .unwrap_or_default();
+
     let p = plan(Input {
-        gateway: GatewayId {
-            namespace: ns.clone(),
-            name: name.clone(),
-            generation,
-        },
+        gateway: me,
+        sink_fingerprint: sink_fingerprint.clone(),
+        previous_sink_fingerprint: previous_status.sink_fingerprint.clone(),
+        sink_drifted,
+        sink_conflict,
+        previously_programmed,
         spec: gw.spec.clone(),
         namespaces: ctx
             .namespaces
@@ -277,7 +361,8 @@ async fn reconcile_inner(
         ..Default::default()
     };
 
-    // Sink write (spec §5 step 8): only when the plan says the hash changed.
+    // Sink write (spec §5 step 8): when the hash or the sink target changed, or
+    // the sink drifted (missing/edited ConfigMap, periodic etcd re-apply).
     if let Some(rendered) = &p.write {
         let target = Target::from_spec(&ns, &name, &gw.spec);
         if let Err(e) = sink::write(&ctx.client, &target, rendered, &p.config).await {
@@ -298,6 +383,7 @@ async fn reconcile_inner(
                 conditions: merge_conditions(&previous_status.conditions, &planned),
                 observed_generation: gw.metadata.generation,
                 config_hash: previous_hash,
+                sink_fingerprint: previous_status.sink_fingerprint.clone(),
                 last_rendered_at: previous_status.last_rendered_at.clone(),
                 counts: p.counts.clone(),
             };
@@ -317,6 +403,12 @@ async fn reconcile_inner(
             .await;
             telemetry::reconcile_observed(key, "sink_error", started.elapsed().as_secs_f64());
             return Err(Error::Sink(e));
+        }
+        if gw.spec.sink.etcd.is_some() {
+            ctx.etcd_applied
+                .lock()
+                .expect("etcd_applied lock")
+                .insert(key.to_string(), Instant::now());
         }
     }
     let rendered_hash = p.rendered.as_ref().map(|r| r.hash.clone());
@@ -343,6 +435,12 @@ async fn reconcile_inner(
         conditions: merge_conditions(&previous_status.conditions, &p.gateway_conditions),
         observed_generation: gw.metadata.generation,
         config_hash: rendered_hash.or(previous_hash),
+        // Only a rendered config proves the sink matches this spec.sink.
+        sink_fingerprint: if p.rendered.is_some() {
+            Some(sink_fingerprint)
+        } else {
+            previous_status.sink_fingerprint.clone()
+        },
         last_rendered_at,
         counts: p.counts.clone(),
     };
@@ -394,9 +492,18 @@ async fn reconcile_inner(
     Ok(Action::requeue(REQUEUE_OK))
 }
 
-pub fn error_policy(_gw: Arc<FeatherbitGateway>, err: &Error, _ctx: Arc<Context>) -> Action {
-    tracing::warn!(error = %err, "reconcile failed; backing off");
-    Action::requeue(Duration::from_secs(30))
+pub fn error_policy(gw: Arc<FeatherbitGateway>, err: &Error, ctx: Arc<Context>) -> Action {
+    let key = format!("{}/{}", gw.namespace().unwrap_or_default(), gw.name_any());
+    let attempt = {
+        let mut attempts = ctx.attempts.lock().expect("attempts lock");
+        let n = attempts.entry(key).or_insert(0);
+        let current = *n;
+        *n = n.saturating_add(1);
+        current
+    };
+    let delay = backoff_delay(attempt);
+    tracing::warn!(error = %err, attempt, delay_secs = delay.as_secs(), "reconcile failed; backing off");
+    Action::requeue(delay)
 }
 
 /// Spawns a reflector for `T` and returns its `Store` plus a trigger stream.
@@ -472,7 +579,7 @@ pub async fn run_controller(
     let (stores, stores_t) = watched::<StoreCr>(&client, cfg(), None);
     let (consumers, consumers_t) = watched::<Consumer>(&client, cfg(), None);
     let (namespaces, namespaces_t) = watched::<Namespace>(&client, cfg(), None);
-    let (_cms, cms_t) = watched::<ConfigMap>(
+    let (configmaps, cms_t) = watched::<ConfigMap>(
         &client,
         watcher::Config::default().labels("app.kubernetes.io/managed-by=featherbit-operator"),
         None,
@@ -495,6 +602,9 @@ pub async fn run_controller(
         plugin_configs: plugin_configs.clone(),
         stores: stores.clone(),
         consumers: consumers.clone(),
+        configmaps: configmaps.clone(),
+        etcd_applied: Default::default(),
+        attempts: Default::default(),
         last_object_statuses: Default::default(),
         last_merged: Default::default(),
     });
@@ -527,6 +637,7 @@ pub async fn run_controller(
         stores.wait_until_ready().boxed(),
         consumers.wait_until_ready().boxed(),
         namespaces.wait_until_ready().boxed(),
+        configmaps.wait_until_ready().boxed(),
     ]);
     tokio::select! {
         _ = caches_ready => {}
@@ -560,7 +671,7 @@ pub async fn run_controller(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::crd::status::{ACCEPTED, REASON_PROGRAMMED, REASON_VALID};
+    use crate::crd::status::{ACCEPTED, REASON_VALID};
 
     fn obj() -> ObjectRef {
         ObjectRef {
@@ -630,6 +741,13 @@ mod tests {
             programmed.last_transition_time,
             Time(k8s_openapi::jiff::Timestamp::UNIX_EPOCH)
         );
+    }
+
+    #[test]
+    fn backoff_doubles_from_30s_and_caps_at_300s() {
+        let secs: Vec<u64> = (0..6).map(|n| backoff_delay(n).as_secs()).collect();
+        assert_eq!(secs, [30, 60, 120, 240, 300, 300]);
+        assert_eq!(backoff_delay(u32::MAX).as_secs(), 300);
     }
 
     #[test]

@@ -5,12 +5,14 @@ use std::collections::BTreeMap;
 use k8s_openapi::api::core::v1::ConfigMap;
 use kube::api::{Patch, PatchParams};
 use kube::{Api, Client};
+use sha2::{Digest, Sha256};
 
 use super::SinkError;
 use crate::reconcile::render::Rendered;
 
 pub const FIELD_MANAGER: &str = "featherbit-operator";
 pub const KEY: &str = "gateway.yaml";
+pub const HASH_ANNOTATION: &str = "featherbit.io/config-hash";
 
 pub fn desired_configmap(
     namespace: &str,
@@ -29,11 +31,33 @@ pub fn desired_configmap(
         ("featherbit.io/gateway".to_string(), gateway.to_string()),
     ]));
     cm.metadata.annotations = Some(BTreeMap::from([(
-        "featherbit.io/config-hash".to_string(),
+        HASH_ANNOTATION.to_string(),
         rendered.hash.clone(),
     )]));
     cm.data = Some(BTreeMap::from([(KEY.to_string(), rendered.yaml.clone())]));
     cm
+}
+
+/// True when the sink ConfigMap no longer holds what the last write put there:
+/// it is missing, its hash annotation differs from `expected_hash`, or its
+/// `gateway.yaml` was edited (the hash is sha256 of the rendered text).
+pub fn is_drifted(cm: Option<&ConfigMap>, expected_hash: Option<&str>) -> bool {
+    let Some(cm) = cm else { return true };
+    let Some(expected) = expected_hash else {
+        return false; // nothing was ever written; the hash comparison forces the first write
+    };
+    let annotated = cm
+        .metadata
+        .annotations
+        .as_ref()
+        .and_then(|a| a.get(HASH_ANNOTATION));
+    if annotated.map(String::as_str) != Some(expected) {
+        return true;
+    }
+    match cm.data.as_ref().and_then(|d| d.get(KEY)) {
+        Some(yaml) => hex::encode(Sha256::digest(yaml.as_bytes())) != expected,
+        None => true,
+    }
 }
 
 pub async fn apply(client: &Client, cm: &ConfigMap) -> Result<(), SinkError> {
@@ -76,5 +100,40 @@ mod tests {
             "abc"
         );
         assert!(cm.metadata.owner_references.is_none());
+    }
+
+    fn rendered_cm() -> (ConfigMap, String) {
+        let r = crate::reconcile::render::render(&crate::validators::empty_config());
+        (desired_configmap("ns", "c", "g", &r), r.hash)
+    }
+
+    #[test]
+    fn missing_configmap_is_drifted() {
+        assert!(is_drifted(None, Some("h")));
+        assert!(is_drifted(None, None));
+    }
+
+    #[test]
+    fn untouched_configmap_is_not_drifted() {
+        let (cm, hash) = rendered_cm();
+        assert!(!is_drifted(Some(&cm), Some(&hash)));
+    }
+
+    #[test]
+    fn annotation_or_data_mismatch_is_drifted() {
+        let (mut cm, hash) = rendered_cm();
+        assert!(is_drifted(Some(&cm), Some("other")));
+        cm.data.as_mut().unwrap().insert(
+            KEY.into(),
+            "routes: []
+"
+            .into(),
+        );
+        assert!(is_drifted(Some(&cm), Some(&hash)), "edited data");
+        cm.data = None;
+        assert!(is_drifted(Some(&cm), Some(&hash)), "key removed");
+        let (mut cm, hash) = rendered_cm();
+        cm.metadata.annotations = None;
+        assert!(is_drifted(Some(&cm), Some(&hash)), "annotation removed");
     }
 }

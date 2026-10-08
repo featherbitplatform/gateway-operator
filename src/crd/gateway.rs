@@ -108,6 +108,10 @@ pub struct GatewayStatus {
     pub observed_generation: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub config_hash: Option<String>,
+    /// sha256 of the `spec.sink` the last successful write targeted; a
+    /// difference means the sink target changed and must be written again.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sink_fingerprint: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_rendered_at: Option<k8s_openapi::apimachinery::pkg::apis::meta::v1::Time>,
     #[serde(default)]
