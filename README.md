@@ -39,6 +39,26 @@ Then apply `Route` and `Policy` objects in `gateway-system` and watch them with 
 
 On an operator-managed gateway the custom resources win. Edits made through the gateway's Admin API, web UI or MCP tools are not written back to the resources and are overwritten by the next render (file mode) or the next reconcile (etcd mode). Use the UI to inspect and debug, not to edit.
 
+## Sinks
+
+- Each gateway needs its own sink. Two `FeatherbitGateway` objects that share a sink (the same `configMap.name` in one namespace, or a shared etcd endpoint with equal or nested prefixes such as `/fb` and `/fb/b`) would overwrite each other. The older gateway (creationTimestamp, then namespace/name) keeps writing; the newer one reports `Ready=False` / `InvalidSpec` naming the other gateway, writes nothing and emits a warning event.
+- The sink is written when the rendered config changes, when `spec.sink` changes (`status.sinkFingerprint`), and to repair drift: a deleted or edited ConfigMap is restored, and an etcd sink is re-applied every 10 minutes.
+- A legitimately empty selection renders an empty config and empties the sink (ConfigMap data, or the etcd prefix). That is by design. Selector mistakes (unknown operators, `In` without values, invalid label syntax) are rejected by the admission webhook, so they cannot silently empty a sink.
+
+## Upgrades
+
+`helm upgrade` does not update the contents of a chart's `crds/` directory. On every operator upgrade apply the CRDs yourself:
+
+```bash
+kubectl apply -f charts/featherbit-operator/crds/
+# or, from the installed binary:
+featherbit-operator crds | kubectl apply -f -
+```
+
+## Trust boundary
+
+Whoever can create a `FeatherbitGateway` in a namespace can direct the operator to read the `user` and `password` keys of any Secret in that namespace (etcd `credentialsSecretRef`) and to overwrite the `gateway.yaml` key of any ConfigMap there (`sink.configMap.name`). Restrict `FeatherbitGateway` create/update rights with RBAC accordingly.
+
 ## Artifacts
 
 | Artifact | Location |

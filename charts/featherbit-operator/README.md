@@ -33,7 +33,7 @@ Secret behind to delete manually.
 This chart installs the operator only; gateways stay on the `featherbit-gateway` chart.
 
 - File mode: install the gateway chart with `config.gatewayConfigMap=<name>` and give the `FeatherbitGateway` `spec.sink.configMap.name: <name>`.
-- etcd mode: install the gateway chart with `config.source=etcd`, `config.etcd.endpoints` and `config.gateway: {}` (an empty seed, so a pod booting against an empty prefix seeds nothing; a non-empty seed is replaced by the first reconcile), and give the `FeatherbitGateway` `spec.sink.etcd` the same endpoints and prefix.
+- etcd mode: install the gateway chart with `config.source=etcd`, `config.etcd.endpoints` and `--set-string config.gatewayRaw='routes: []'` (values-file form: `config: { gatewayRaw: "routes: []" }`; an empty seed, so a pod booting against an empty prefix seeds nothing; a non-empty seed is replaced by the first reconcile; do not use `config.gateway: {}`, Helm deep-merges maps so it does not clear the gateway chart's defaults), and give the `FeatherbitGateway` `spec.sink.etcd` the same endpoints and prefix.
 
 Full walkthrough: https://featherbitplatform.github.io/gateway/operator/getting-started
 
