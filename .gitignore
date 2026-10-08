@@ -1,3 +1,4 @@
 /target
 /.superpowers/
 /.worktrees/
+/e2e/.kube
