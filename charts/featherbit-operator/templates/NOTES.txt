@@ -7,7 +7,13 @@ Create a first gateway:
   kind: FeatherbitGateway
   metadata:
     name: demo
-  spec: {}
+  spec:
+    sink:
+      configMap:
+        name: demo-gateway-config
+    resources:
+      namespaces:
+        from: All
   YAML
 
   kubectl get featherbitgateways

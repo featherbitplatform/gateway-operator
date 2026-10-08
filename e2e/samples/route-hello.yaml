@@ -1,0 +1,9 @@
+apiVersion: featherbit.io/v1alpha1
+kind: Route
+metadata:
+  name: hello
+  namespace: shop
+spec:
+  match:
+    path: /hello
+  policy: hello

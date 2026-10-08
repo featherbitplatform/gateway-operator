@@ -1,0 +1,20 @@
+apiVersion: featherbit.io/v1alpha1
+kind: Policy
+metadata:
+  name: hello
+  namespace: shop
+spec:
+  nodes:
+    - id: listener
+      type: listener
+    - id: mock
+      type: mocking
+      config:
+        response_example: '{"gateway": "featherbit", "via": "operator"}'
+    - id: client
+      type: client
+  edges:
+    - from: listener.out
+      to: mock.in
+    - from: mock.success
+      to: client.in

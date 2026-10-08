@@ -1,0 +1,63 @@
+# kind end-to-end: operator + gateway chart, ConfigMap and etcd sinks, webhook
+# rejection and partial render. Needs the gateway chart from develop (it has
+# config.gatewayConfigMap; the released 0.15.0 does not).
+name: e2e
+
+on:
+  push:
+    branches: [develop]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  kind:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      GATEWAY_CHART: gateway/charts/featherbit-gateway
+      KEEP_CLUSTER: "1"   # the runner is discarded; keeps the cluster for the failure collection step
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        with:
+          repository: featherbitplatform/gateway
+          ref: develop
+          path: gateway
+
+      - uses: azure/setup-helm@v4
+
+      # Installs the kind binary only; e2e/run.sh creates and deletes the cluster.
+      - uses: helm/kind-action@v1
+        with:
+          install_only: true
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: e2e
+        run: bash e2e/run.sh
+
+      - name: Collect cluster state
+        if: failure()
+        run: |
+          kubectl -n gw get all -o yaml > gw-all.yaml || true
+          kubectl -n gw get featherbitgateways -o yaml > gw-gateways.yaml || true
+          kubectl -n gw logs deploy/op-featherbit-operator --tail=500 > operator.log || true
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-diagnostics
+          path: |
+            err.txt
+            gw-all.yaml
+            gw-gateways.yaml
+            operator.log
+          if-no-files-found: ignore
