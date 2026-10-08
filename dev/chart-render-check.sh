@@ -8,8 +8,9 @@ out=$(helm template op "$CHART")
 grep -q 'kind: ValidatingWebhookConfiguration' <<<"$out" || fail "no webhook configuration"
 grep -q 'failurePolicy: Fail' <<<"$out" || fail "webhook must fail closed by default"
 grep -q 'caBundle: ' <<<"$out" || fail "self-signed CA bundle not injected"
-grep -q 'path: /validate/featherbit.io/v1alpha1/Policy' <<<"$out" || fail "Policy webhook path missing"
-for k in Route Policy Supernode PluginConfig Store Consumer FeatherbitGateway; do
+grep -q 'path: /validate/featherbit.io/v1alpha1/policy' <<<"$out" || fail "Policy webhook path missing"
+# The API server rejects uppercase URL path segments, so the paths are lowercase.
+for k in route policy supernode pluginconfig store consumer featherbitgateway; do
   grep -q "/validate/featherbit.io/v1alpha1/$k" <<<"$out" || fail "webhook for $k missing"
 done
 grep -q 'readOnlyRootFilesystem: true' <<<"$out" || fail "security context missing"

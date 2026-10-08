@@ -273,7 +273,7 @@ the gateway that rendered it, so cleanup is a documented manual step.
 A `ValidatingWebhookConfiguration` for CREATE and UPDATE on all seven kinds,
 `failurePolicy: Fail`, `sideEffects: None`, `matchPolicy: Equivalent`, served
 by axum over rustls on port 9443 inside the operator process at
-`/validate/featherbit.io/v1alpha1/<kind>`.
+`/validate/featherbit.io/v1alpha1/<kind>` (kind lowercase: the API server rejects uppercase path segments).
 
 What the webhook judges (object alone, no cluster reads):
 

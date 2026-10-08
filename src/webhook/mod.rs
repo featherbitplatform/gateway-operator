@@ -17,18 +17,29 @@ pub fn router() -> Router {
         .route("/validate/featherbit.io/v1alpha1/{kind}", post(validate))
 }
 
+const KINDS: [&str; 7] = [
+    "Route",
+    "Policy",
+    "Supernode",
+    "PluginConfig",
+    "Store",
+    "Consumer",
+    "FeatherbitGateway",
+];
+
+/// Canonical spelling of a kind. The webhook URL carries the lowercase form
+/// (the API server rejects uppercase path segments); unknown kinds pass through.
+fn canonical_kind(kind: &str) -> &str {
+    KINDS
+        .iter()
+        .find(|k| k.eq_ignore_ascii_case(kind))
+        .copied()
+        .unwrap_or(kind)
+}
+
 /// Metric label for a kind: the seven known kinds, else `unknown`, so URL
 /// paths and request bodies cannot grow label cardinality.
 fn metric_kind(kind: &str) -> &str {
-    const KINDS: [&str; 7] = [
-        "Route",
-        "Policy",
-        "Supernode",
-        "PluginConfig",
-        "Store",
-        "Consumer",
-        "FeatherbitGateway",
-    ];
     KINDS
         .iter()
         .find(|k| **k == kind)
@@ -53,7 +64,7 @@ async fn validate(
             .cloned()
             .unwrap_or(serde_json::Value::Null);
         let kind = if req.kind.kind.is_empty() {
-            kind.clone()
+            canonical_kind(&kind).to_string()
         } else {
             req.kind.kind.clone()
         };
@@ -123,16 +134,27 @@ mod tests {
     }
 
     async fn post(kind: &str, spec: serde_json::Value) -> serde_json::Value {
-        let req = Request::post(format!("/validate/featherbit.io/v1alpha1/{kind}"))
-            .header("content-type", "application/json")
-            .body(Body::from(review(kind, spec).to_string()))
-            .unwrap();
+        // The chart registers the lowercase path; the review body carries the real kind.
+        let req = Request::post(format!(
+            "/validate/featherbit.io/v1alpha1/{}",
+            kind.to_lowercase()
+        ))
+        .header("content-type", "application/json")
+        .body(Body::from(review(kind, spec).to_string()))
+        .unwrap();
         let res = router().oneshot(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::OK);
         let bytes = axum::body::to_bytes(res.into_body(), 1 << 20)
             .await
             .unwrap();
         serde_json::from_slice(&bytes).unwrap()
+    }
+
+    #[test]
+    fn canonical_kind_restores_case() {
+        assert_eq!(canonical_kind("pluginconfig"), "PluginConfig");
+        assert_eq!(canonical_kind("featherbitgateway"), "FeatherbitGateway");
+        assert_eq!(canonical_kind("bogus"), "bogus");
     }
 
     #[test]

@@ -36,6 +36,6 @@ webhooks:
       service:
         name: {{ $svc }}
         namespace: {{ $.Release.Namespace }}
-        path: /validate/featherbit.io/v1alpha1/{{ $kind }}
+        path: /validate/featherbit.io/v1alpha1/{{ $kind | lower }}
         port: 443
   {{- end }}
