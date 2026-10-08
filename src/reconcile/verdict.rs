@@ -360,6 +360,21 @@ url: 'redis://r:6379'";
     }
 
     #[test]
+    fn workflow_policy_naming_a_store_needs_the_store_selected() {
+        let sp = crate::validators::tests::WORKFLOW_STORE_POLICY;
+        let store = "type: redis
+url: 'redis://r:6379'";
+        let v = verdicts(vec![c(Kind::Policy, "wf", sp), c(Kind::Store, "s1", store)]);
+        assert!(v.excluded.is_empty(), "{:?}", v.excluded);
+        assert_eq!(v.config.policies.len(), 1);
+
+        let v = verdicts(vec![c(Kind::Policy, "wf", sp)]);
+        let e = find(&v, "wf");
+        assert_eq!((e.condition, e.reason), (ACCEPTED, REASON_COMPILE_FAILED));
+        assert!(e.message.contains("s1"), "{}", e.message);
+    }
+
+    #[test]
     fn output_is_sorted_by_name() {
         let v = verdicts(vec![
             c(Kind::Policy, "zeta", POLICY_OK),

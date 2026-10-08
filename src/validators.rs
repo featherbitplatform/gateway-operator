@@ -46,20 +46,27 @@ pub fn check_route(r: &RouteConfig) -> Result<(), String> {
         .map_err(|e| format!("route '{}': {e}", r.name))
 }
 
+/// True when `v` contains, at any depth, an object with a `store` key.
+fn mentions_store(v: &serde_json::Value) -> bool {
+    match v {
+        serde_json::Value::Object(m) => m.contains_key("store") || m.values().any(mentions_store),
+        serde_json::Value::Array(a) => a.iter().any(mentions_store),
+        _ => false,
+    }
+}
+
 /// True when the policy references no shared object and can therefore be
 /// compiled on its own. A node is NOT self-contained when it has a
-/// `config_ref`, is a `type: supernode` instance, or names a Store in its
-/// config: a top-level `store` key (e.g. `limit-count {policy: redis, store}`)
-/// or a nested `session.store` (session plugins). Reads are shallow.
+/// `config_ref`, is a `type: supernode` instance, or names a Store anywhere in
+/// its config: any object at any depth having a `store` key (top-level
+/// `limit-count {policy: redis, store}`, `session.store`, a `workflow` rule's
+/// `rules[].actions[][1].store`, ...). The scan is recursive.
 pub fn is_self_contained(p: &PolicyConfig) -> bool {
     p.nodes.iter().all(|n| {
         n.config_ref.is_none()
             && n.node_type != "supernode"
             && !n.config.contains_key("store")
-            && n.config
-                .get("session")
-                .and_then(|s| s.get("store"))
-                .is_none()
+            && !n.config.values().any(mentions_store)
     })
 }
 
@@ -240,6 +247,32 @@ edges:
             "config: { session: { store: s1 } }",
         ));
         assert!(!is_self_contained(&sess));
+    }
+
+    pub(crate) const WORKFLOW_STORE_POLICY: &str = r#"
+name: wf
+nodes:
+  - { id: listener, type: listener }
+  - id: wf
+    type: workflow
+    config:
+      rules:
+        - actions:
+            - ["limit-count", { count: 5, time_window: 60, policy: redis, store: s1 }]
+  - { id: client, type: client }
+edges:
+  - { from: listener.out, to: wf.in }
+  - { from: wf.success, to: client.in }
+  - { from: wf.denied, to: client.in }
+  - { from: wf.limited, to: client.in }
+"#;
+
+    #[test]
+    fn workflow_rule_naming_a_store_is_not_self_contained() {
+        let p = policy(WORKFLOW_STORE_POLICY);
+        assert!(!is_self_contained(&p));
+        check_policy_structure(&p).unwrap();
+        check_policy(&p).unwrap();
     }
 
     #[test]
