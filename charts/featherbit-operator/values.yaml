@@ -17,7 +17,9 @@ webhook:
   timeoutSeconds: 10
   certManager:
     enabled: false
-    issuerRef: { name: selfsigned, kind: Issuer }
+    issuerRef:
+      name: selfsigned
+      kind: Issuer
 metrics:
   port: 8080
   serviceMonitor:
@@ -37,14 +39,19 @@ podSecurityContext:
   runAsUser: 65532
   runAsGroup: 65532
   fsGroup: 65532
-  seccompProfile: { type: RuntimeDefault }
+  seccompProfile:
+    type: RuntimeDefault
 securityContext:
   allowPrivilegeEscalation: false
   readOnlyRootFilesystem: true
-  capabilities: { drop: ["ALL"] }
+  capabilities:
+    drop: ["ALL"]
 resources:
-  requests: { cpu: 50m, memory: 64Mi }
-  limits: { memory: 256Mi }
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    memory: 256Mi
 nodeSelector: {}
 tolerations: []
 affinity: {}
