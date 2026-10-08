@@ -47,10 +47,18 @@ async fn main() {
         Command::Version => println!("featherbit-operator {}", env!("CARGO_PKG_VERSION")),
         Command::Crds => print!("{}", featherbit_operator::crd::all_crds_yaml()),
         Command::Run(args) => {
-            // Filled in by Task 11.
-            let _ = args;
-            eprintln!("run: not implemented yet");
-            std::process::exit(2);
+            if let Err(e) = featherbit_operator::run::run(featherbit_operator::run::RunConfig {
+                tls_cert: args.tls_cert,
+                tls_key: args.tls_key,
+                webhook_addr: args.webhook_addr,
+                metrics_addr: args.metrics_addr,
+                log_format: args.log_format,
+            })
+            .await
+            {
+                eprintln!("{e:#}");
+                std::process::exit(1);
+            }
         }
     }
 }

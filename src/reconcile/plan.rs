@@ -423,7 +423,7 @@ mod tests {
             ("False", REASON_INVALID_SPEC)
         );
         assert_eq!(p.events.len(), 1);
-        assert_eq!(p.events[0].reason, "InvalidSpec");
+        assert_eq!(p.events[0].reason, REASON_INVALID_SPEC);
         assert!(p.events[0].obj.is_none());
     }
 
@@ -582,7 +582,6 @@ mod tests {
             ],
             None,
         ));
-        println!("gateway conditions: {:?}", p.gateway_conditions);
         let ready = condition(&p.gateway_conditions, READY);
         assert_eq!(
             (ready.status.as_str(), ready.reason.as_str()),
@@ -601,7 +600,7 @@ mod tests {
         assert!(p
             .events
             .iter()
-            .any(|e| e.reason == "CompileFailed" && e.warning && e.obj.is_none()));
+            .any(|e| e.reason == REASON_COMPILE_FAILED && e.warning && e.obj.is_none()));
     }
 
     #[test]
