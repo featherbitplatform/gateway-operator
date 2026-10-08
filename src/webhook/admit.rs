@@ -51,6 +51,14 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn policy_naming_a_store_is_admitted() {
+        let p: PolicyConfig =
+            serde_yaml::from_str(crate::validators::tests::STORE_POLICY).unwrap();
+        let spec = json!({ "nodes": p.nodes, "edges": p.edges });
+        admit("Policy", "rl", &spec).unwrap();
+    }
+
+    #[test]
     fn policy_with_unknown_node_type_is_denied_with_node_and_type() {
         let err = admit("Policy", "p", &json!({
             "nodes": [{"id": "listener", "type": "listener"}, {"id": "x", "type": "nope"}, {"id": "client", "type": "client"}],

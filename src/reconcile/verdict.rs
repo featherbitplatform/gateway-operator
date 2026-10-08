@@ -88,7 +88,12 @@ pub fn verdicts(kept: Vec<Candidate>) -> Verdicts {
         &mut excluded,
     );
     let policies =
-        parse_kind::<PolicyConfig>(Kind::Policy, &kept, validators::check_policy, &mut excluded);
+        parse_kind::<PolicyConfig>(
+        Kind::Policy,
+        &kept,
+        validators::check_policy_structure,
+        &mut excluded,
+    );
     let routes =
         parse_kind::<RouteConfig>(Kind::Route, &kept, validators::check_route, &mut excluded);
 
@@ -337,6 +342,25 @@ edges:
         let v = verdicts(vec![c(Kind::Route, "r", "match: 42\npolicy: p")]);
         let e = find(&v, "r");
         assert_eq!((e.condition, e.reason), (ACCEPTED, REASON_INVALID));
+    }
+
+    #[test]
+    fn policy_naming_a_store_needs_the_store_selected() {
+        let sp = crate::validators::tests::STORE_POLICY;
+        let store = "type: redis
+url: 'redis://r:6379'";
+        let v = verdicts(vec![
+            c(Kind::Policy, "rl", sp),
+            c(Kind::Store, "s1", store),
+        ]);
+        assert!(v.excluded.is_empty(), "{:?}", v.excluded);
+        assert_eq!(v.config.policies.len(), 1);
+        v.whole_compile.as_ref().unwrap();
+
+        let v = verdicts(vec![c(Kind::Policy, "rl", sp)]);
+        let e = find(&v, "rl");
+        assert_eq!((e.condition, e.reason), (ACCEPTED, REASON_COMPILE_FAILED));
+        assert!(e.message.contains("s1"), "{}", e.message);
     }
 
     #[test]

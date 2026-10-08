@@ -46,18 +46,36 @@ pub fn check_route(r: &RouteConfig) -> Result<(), String> {
         .map_err(|e| format!("route '{}': {e}", r.name))
 }
 
-/// True when the policy references no shared object (no `config_ref`, no
-/// `type: supernode` instance) and can therefore be compiled on its own.
+/// True when the policy references no shared object and can therefore be
+/// compiled on its own. A node is NOT self-contained when it has a
+/// `config_ref`, is a `type: supernode` instance, or names a Store in its
+/// config: a top-level `store` key (e.g. `limit-count {policy: redis, store}`)
+/// or a nested `session.store` (session plugins). Reads are shallow.
 pub fn is_self_contained(p: &PolicyConfig) -> bool {
-    p.nodes
-        .iter()
-        .all(|n| n.config_ref.is_none() && n.node_type != "supernode")
+    p.nodes.iter().all(|n| {
+        n.config_ref.is_none()
+            && n.node_type != "supernode"
+            && n.config.get("store").is_none()
+            && n.config
+                .get("session")
+                .and_then(|s| s.get("store"))
+                .is_none()
+    })
 }
 
-pub fn check_policy(p: &PolicyConfig) -> Result<(), String> {
+/// Structural checks only: the gateway's graph validation and node types.
+/// The reconciler uses this per object; stores and other shared objects are
+/// resolved later by `compile_policy_against`.
+pub fn check_policy_structure(p: &PolicyConfig) -> Result<(), String> {
     featherbit::graph::validate_policy(p)
         .map_err(|errs| format!("policy '{}': {}", p.name, errs.join("; ")))?;
-    check_node_types(&format!("policy '{}'", p.name), &p.nodes, false)?;
+    check_node_types(&format!("policy '{}'", p.name), &p.nodes, false)
+}
+
+/// Admission check: structure plus a standalone compile when the policy is
+/// self-contained.
+pub fn check_policy(p: &PolicyConfig) -> Result<(), String> {
+    check_policy_structure(p)?;
     if is_self_contained(p) {
         compile_policy_against(p, &empty_config())?;
     }
@@ -124,7 +142,7 @@ pub fn check_consumer(c: &ConsumerConfig) -> Result<(), String> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     fn policy(yaml: &str) -> PolicyConfig {
@@ -193,6 +211,35 @@ edges:
         ));
         assert!(!is_self_contained(&with_sn));
         check_policy(&with_sn).unwrap();
+    }
+
+    pub(crate) const STORE_POLICY: &str = r#"
+name: rl
+nodes:
+  - { id: listener, type: listener }
+  - { id: lim, type: limit-count, config: { count: 5, time_window: 60, policy: redis, store: s1 } }
+  - { id: ok, type: mocking, config: { response_example: "{}" } }
+  - { id: no, type: mocking, config: { response_example: "{}" } }
+  - { id: client, type: client }
+edges:
+  - { from: listener.out, to: lim.in }
+  - { from: lim.success, to: ok.in }
+  - { from: lim.limited, to: no.in }
+  - { from: ok.success, to: client.in }
+  - { from: no.success, to: client.in }
+"#;
+
+    #[test]
+    fn policy_naming_a_store_is_not_self_contained_and_admitted_structurally() {
+        let p = policy(STORE_POLICY);
+        assert!(!is_self_contained(&p));
+        check_policy(&p).unwrap();
+        check_policy_structure(&p).unwrap();
+        let sess = policy(&OK.replace(
+            "config: { response_example: \"{}\" }",
+            "config: { session: { store: s1 } }",
+        ));
+        assert!(!is_self_contained(&sess));
     }
 
     #[test]
