@@ -336,6 +336,49 @@ mod tests {
         assert!(label_selector_matches(&not_exists, &BTreeMap::new()));
     }
 
+    fn expr(key: &str, op: &str, values: Option<&[&str]>) -> LabelSelector {
+        LabelSelector {
+            match_expressions: Some(vec![LabelSelectorRequirement {
+                key: key.into(),
+                operator: op.into(),
+                values: values.map(|v| v.iter().map(|s| s.to_string()).collect()),
+            }]),
+            ..Default::default()
+        }
+    }
+
+    fn tier(v: &str) -> BTreeMap<String, String> {
+        [("tier".to_string(), v.to_string())].into()
+    }
+
+    #[test]
+    fn notin_matches_when_the_label_is_absent() {
+        let sel = expr("tier", "NotIn", Some(&["db"]));
+        assert!(label_selector_matches(&sel, &BTreeMap::new()));
+        assert!(!label_selector_matches(&sel, &tier("db")));
+        assert!(label_selector_matches(&sel, &tier("edge")));
+    }
+
+    #[test]
+    fn exists_requires_the_key() {
+        let sel = expr("tier", "Exists", None);
+        assert!(!label_selector_matches(&sel, &BTreeMap::new()));
+        assert!(label_selector_matches(&sel, &tier("x")));
+    }
+
+    #[test]
+    fn unknown_operator_matches_nothing() {
+        let sel = expr("tier", "Bogus", None);
+        assert!(!label_selector_matches(&sel, &tier("x")));
+    }
+
+    #[test]
+    fn empty_selector_matches_everything() {
+        let sel = LabelSelector::default();
+        assert!(label_selector_matches(&sel, &BTreeMap::new()));
+        assert!(label_selector_matches(&sel, &tier("x")));
+    }
+
     #[test]
     fn same_name_conflict_oldest_wins() {
         let s = spec("sink: { configMap: { name: c } }\nresources: { namespaces: { from: All } }");

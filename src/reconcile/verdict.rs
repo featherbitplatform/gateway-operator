@@ -87,8 +87,7 @@ pub fn verdicts(kept: Vec<Candidate>) -> Verdicts {
         validators::check_supernode,
         &mut excluded,
     );
-    let policies =
-        parse_kind::<PolicyConfig>(
+    let policies = parse_kind::<PolicyConfig>(
         Kind::Policy,
         &kept,
         validators::check_policy_structure,
@@ -349,10 +348,7 @@ edges:
         let sp = crate::validators::tests::STORE_POLICY;
         let store = "type: redis
 url: 'redis://r:6379'";
-        let v = verdicts(vec![
-            c(Kind::Policy, "rl", sp),
-            c(Kind::Store, "s1", store),
-        ]);
+        let v = verdicts(vec![c(Kind::Policy, "rl", sp), c(Kind::Store, "s1", store)]);
         assert!(v.excluded.is_empty(), "{:?}", v.excluded);
         assert_eq!(v.config.policies.len(), 1);
         v.whole_compile.as_ref().unwrap();

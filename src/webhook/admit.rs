@@ -52,8 +52,7 @@ mod tests {
 
     #[test]
     fn policy_naming_a_store_is_admitted() {
-        let p: PolicyConfig =
-            serde_yaml::from_str(crate::validators::tests::STORE_POLICY).unwrap();
+        let p: PolicyConfig = serde_yaml::from_str(crate::validators::tests::STORE_POLICY).unwrap();
         let spec = json!({ "nodes": p.nodes, "edges": p.edges });
         admit("Policy", "rl", &spec).unwrap();
     }

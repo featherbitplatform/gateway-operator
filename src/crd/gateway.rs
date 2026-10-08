@@ -162,7 +162,99 @@ pub fn validate_spec(spec: &FeatherbitGatewaySpec) -> Result<(), String> {
     {
         return Err("spec.resources.namespaces.selector is required when from is Selector".into());
     }
+    if let Some(sel) = &spec.resources.selector {
+        validate_label_selector("spec.resources.selector", sel)?;
+    }
+    if let Some(sel) = &spec.resources.namespaces.selector {
+        validate_label_selector("spec.resources.namespaces.selector", sel)?;
+    }
     Ok(())
+}
+
+/// Kubernetes label-selector rules. A selector the matcher cannot interpret
+/// would silently select nothing and empty the sink, so reject it up front.
+fn validate_label_selector(path: &str, sel: &LabelSelector) -> Result<(), String> {
+    for (k, v) in sel.match_labels.iter().flatten() {
+        let p = format!("{path}.matchLabels[{k}]");
+        validate_label_key(&p, k)?;
+        validate_label_value(&p, v)?;
+    }
+    for (i, req) in sel.match_expressions.iter().flatten().enumerate() {
+        let p = format!("{path}.matchExpressions[{i}]");
+        validate_label_key(&format!("{p}.key"), &req.key)?;
+        let values = req.values.as_deref().unwrap_or(&[]);
+        match req.operator.as_str() {
+            "In" | "NotIn" => {
+                if values.is_empty() {
+                    return Err(format!(
+                        "{p}.values must be non-empty for operator {}",
+                        req.operator
+                    ));
+                }
+            }
+            "Exists" | "DoesNotExist" => {
+                if !values.is_empty() {
+                    return Err(format!(
+                        "{p}.values must be empty for operator {}",
+                        req.operator
+                    ));
+                }
+            }
+            other => {
+                return Err(format!(
+                    "{p}.operator '{other}' must be one of In, NotIn, Exists, DoesNotExist"
+                ))
+            }
+        }
+        for v in values {
+            validate_label_value(&format!("{p}.values"), v)?;
+        }
+    }
+    Ok(())
+}
+
+fn is_label_name(s: &str) -> bool {
+    let b = s.as_bytes();
+    !b.is_empty()
+        && b.len() <= 63
+        && b[0].is_ascii_alphanumeric()
+        && b[b.len() - 1].is_ascii_alphanumeric()
+        && b.iter()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'-' | b'_' | b'.'))
+}
+
+fn is_dns_subdomain(s: &str) -> bool {
+    !s.is_empty()
+        && s.len() <= 253
+        && s.split('.').all(|part| {
+            !part.is_empty()
+                && part.len() <= 63
+                && part
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+                && !part.starts_with('-')
+                && !part.ends_with('-')
+        })
+}
+
+fn validate_label_key(path: &str, key: &str) -> Result<(), String> {
+    let ok = match key.split_once('/') {
+        Some((prefix, name)) => is_dns_subdomain(prefix) && is_label_name(name),
+        None => is_label_name(key),
+    };
+    if ok {
+        Ok(())
+    } else {
+        Err(format!("{path}: '{key}' is not a valid label key"))
+    }
+}
+
+fn validate_label_value(path: &str, value: &str) -> Result<(), String> {
+    if value.is_empty() || is_label_name(value) {
+        Ok(())
+    } else {
+        Err(format!("{path}: '{value}' is not a valid label value"))
+    }
 }
 
 fn is_dns_label(s: &str) -> bool {
@@ -243,6 +335,105 @@ mod tests {
         assert!(err.contains("namespaces.selector"), "{err}");
         let ok = spec("sink: { configMap: { name: a } }\nresources: { namespaces: { from: Selector, selector: { matchLabels: { team: shop } } } }");
         validate_spec(&ok).unwrap();
+    }
+
+    fn with_selector(sel: &str) -> FeatherbitGatewaySpec {
+        spec(&format!(
+            "sink: {{ configMap: {{ name: a }} }}\nresources: {{ selector: {sel} }}"
+        ))
+    }
+
+    #[test]
+    fn selector_operators_are_checked() {
+        let err = validate_spec(&with_selector(
+            "{ matchExpressions: [{ key: tier, operator: in, values: [a] }] }",
+        ))
+        .unwrap_err();
+        assert!(
+            err.contains("spec.resources.selector.matchExpressions[0].operator"),
+            "{err}"
+        );
+        let err = validate_spec(&with_selector(
+            "{ matchExpressions: [{ key: tier, operator: Exist }] }",
+        ))
+        .unwrap_err();
+        assert!(err.contains("operator 'Exist'"), "{err}");
+    }
+
+    #[test]
+    fn selector_in_and_notin_need_values_exists_forbids_them() {
+        for op in ["In", "NotIn"] {
+            let err = validate_spec(&with_selector(&format!(
+                "{{ matchExpressions: [{{ key: tier, operator: {op} }}] }}"
+            )))
+            .unwrap_err();
+            assert!(err.contains("values must be non-empty"), "{err}");
+        }
+        for op in ["Exists", "DoesNotExist"] {
+            let err = validate_spec(&with_selector(&format!(
+                "{{ matchExpressions: [{{ key: tier, operator: {op}, values: [x] }}] }}"
+            )))
+            .unwrap_err();
+            assert!(err.contains("values must be empty"), "{err}");
+            validate_spec(&with_selector(&format!(
+                "{{ matchExpressions: [{{ key: tier, operator: {op} }}] }}"
+            )))
+            .unwrap();
+        }
+        validate_spec(&with_selector(
+            "{ matchExpressions: [{ key: tier, operator: NotIn, values: [a, \"\"] }] }",
+        ))
+        .unwrap();
+    }
+
+    #[test]
+    fn selector_keys_and_values_follow_label_syntax() {
+        let long = "a".repeat(64);
+        for bad in [
+            "-a",
+            "a-",
+            "a b",
+            "Foo.com/x/y",
+            "UPPER.io/x",
+            "/x",
+            "a/",
+            &long,
+        ] {
+            let err = validate_spec(&with_selector(&format!(
+                "{{ matchLabels: {{ \"{bad}\": v }} }}"
+            )))
+            .unwrap_err();
+            assert!(
+                err.contains("matchLabels") && err.contains("label key"),
+                "{bad}: {err}"
+            );
+        }
+        for bad in ["-v", "v-", "a b", &long] {
+            let err = validate_spec(&with_selector(&format!(
+                "{{ matchLabels: {{ k: \"{bad}\" }} }}"
+            )))
+            .unwrap_err();
+            assert!(err.contains("label value"), "{bad}: {err}");
+        }
+        let err = validate_spec(&with_selector(
+            "{ matchExpressions: [{ key: tier, operator: In, values: [\"bad value\"] }] }",
+        ))
+        .unwrap_err();
+        assert!(err.contains("matchExpressions[0].values"), "{err}");
+        validate_spec(&with_selector(
+            "{ matchLabels: { \"app.kubernetes.io/name\": \"a_b.c-d\", empty: \"\" } }",
+        ))
+        .unwrap();
+    }
+
+    #[test]
+    fn namespace_selector_is_validated_too() {
+        let s = spec("sink: { configMap: { name: a } }\nresources: { namespaces: { from: Selector, selector: { matchExpressions: [{ key: team, operator: Bogus }] } } }");
+        let err = validate_spec(&s).unwrap_err();
+        assert!(
+            err.contains("spec.resources.namespaces.selector.matchExpressions[0].operator"),
+            "{err}"
+        );
     }
 
     #[test]
