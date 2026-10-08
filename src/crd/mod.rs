@@ -1,5 +1,5 @@
 //! Custom resource definitions.
-pub mod gateway; // Task 3
+pub mod gateway;
 pub mod resources;
 pub mod schema;
 pub mod status;

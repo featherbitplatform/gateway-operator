@@ -11,7 +11,7 @@ use serde_json::{Map, Value};
 use super::schema::{gateway_type_schema, structural_schema};
 use super::status::ResourceStatus;
 
-/// Free-form spec body. The CRD schema (set in [`crd_for`]) constrains it to
+/// Free-form spec body. The CRD schema (set in [`root_schema`]) constrains it to
 /// the gateway type; `#[serde(flatten)]` keeps the YAML flat.
 #[derive(Clone, Debug, Default, Deserialize, Serialize, JsonSchema, PartialEq)]
 pub struct SpecBody {
@@ -216,6 +216,18 @@ mod tests {
     }
 
     #[test]
+    fn spec_body_serializes_flat() {
+        let body: SpecBody = serde_json::from_value(serde_json::json!({
+            "policy": "p", "match": {"path": "/a"}
+        }))
+        .unwrap();
+        let route = Route::new("r1", RouteSpec { body });
+        let value = serde_json::to_value(&route).unwrap();
+        assert_eq!(value["spec"]["policy"], "p");
+        assert!(value["spec"]["body"].is_null());
+    }
+
+    #[test]
     fn to_config_reports_type_errors() {
         let body: SpecBody =
             serde_json::from_value(serde_json::json!({"nodes": "not-a-list"})).unwrap();
@@ -264,7 +276,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "enabled by Task 3 (FeatherbitGateway CRD)"]
     fn all_seven_crds_render_as_yaml_documents() {
         let yaml = crate::crd::all_crds_yaml();
         assert_eq!(yaml.matches("kind: CustomResourceDefinition").count(), 7);
