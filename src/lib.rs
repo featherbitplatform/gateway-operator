@@ -2,3 +2,4 @@
 //!
 //! Modules are added by the tasks that fill them; keep this list in sync.
 pub mod crd;
+pub mod validators;
