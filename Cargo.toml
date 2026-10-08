@@ -10,7 +10,7 @@ license = "Apache-2.0"
 # Pinned to the gateway develop commit that merged the lib target
 # (docs/superpowers/plans/2026-10-08-gateway-lib-and-chart.md, Task 6).
 # Switch to `tag = "vX.Y.Z"` at the next gateway release.
-featherbit = { git = "https://github.com/featherbitplatform/gateway", rev = "8ec39f7", default-features = false, features = ["redis-store"] }
+featherbit = { git = "https://github.com/featherbitplatform/gateway", rev = "4b8c24fed20fd8cf5f49a38c6d443f6d70c48f81", default-features = false, features = ["redis-store"] }
 
 kube = { version = "4", default-features = false, features = ["client", "runtime", "derive", "admission", "rustls-tls"] }
 k8s-openapi = { version = "0.28", features = ["latest", "schemars"] }
