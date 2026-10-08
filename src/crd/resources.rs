@@ -296,6 +296,32 @@ mod tests {
     }
 
     #[test]
+    fn crd_yaml_quotes_yaml11_booleans() {
+        // The canvas `position` schema has an `x`/`y` pair; unquoted `y` is a
+        // boolean to Go YAML and made `helm install` reject the CRDs.
+        let yaml = crate::crd::all_crds_yaml();
+        assert!(
+            yaml.contains(
+                "
+- \"y\"
+"
+            ) || yaml.contains(
+                "- \"y\"
+"
+            ),
+            "required y"
+        );
+        assert!(
+            yaml.contains(
+                "\"y\":
+"
+            ),
+            "property y"
+        );
+        assert!(!yaml.lines().any(|l| l.trim() == "- y" || l.trim() == "y:"));
+    }
+
+    #[test]
     fn kind_enum_round_trips() {
         for k in Kind::ALL {
             assert_eq!(Kind::from_kind_str(k.kind_str()), Some(k));

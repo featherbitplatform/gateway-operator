@@ -238,12 +238,12 @@ spec:
                         x:
                           format: double
                           type: number
-                        y:
+                        "y":
                           format: double
                           type: number
                       required:
                       - x
-                      - y
+                      - "y"
                       type: object
                     type:
                       description: |-
@@ -426,12 +426,12 @@ spec:
                         x:
                           format: double
                           type: number
-                        y:
+                        "y":
                           format: double
                           type: number
                       required:
                       - x
-                      - y
+                      - "y"
                       type: object
                     type:
                       description: |-
