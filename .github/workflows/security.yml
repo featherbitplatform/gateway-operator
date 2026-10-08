@@ -90,6 +90,8 @@ jobs:
           tags: featherbit-operator:sast
           cache-from: type=gha,scope=security-image
           cache-to: type=gha,scope=security-image,mode=max
+      # sbom-action writes to output-file without creating its directory.
+      - run: mkdir -p sbom
       - uses: anchore/sbom-action@v0
         with:
           image: featherbit-operator:sast
