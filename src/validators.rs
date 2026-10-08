@@ -102,8 +102,19 @@ pub fn check_plugin_config(pc: &PluginConfigDef) -> Result<(), String> {
 }
 
 pub fn check_store(s: &StoreConfig) -> Result<(), String> {
-    featherbit::stores::validate_stores(std::slice::from_ref(s))
-        .map_err(|e| format!("store '{}': {e}", s.name))
+    let prefixed = |e: String| {
+        let prefix = format!("store '{}'", s.name);
+        if e.contains(&prefix) {
+            e
+        } else {
+            format!("{prefix}: {e}")
+        }
+    };
+    featherbit::stores::validate_stores(std::slice::from_ref(s)).map_err(prefixed)?;
+    // `validate_stores` does not parse URLs; the offline whole-config compile does.
+    let mut gw = empty_config();
+    gw.stores.push(s.clone());
+    featherbit::state::validate_gateway_config_offline(&gw).map_err(prefixed)
 }
 
 pub fn check_consumer(c: &ConsumerConfig) -> Result<(), String> {
@@ -226,6 +237,18 @@ edges:
         check_store(&s).unwrap();
         let bad: StoreConfig = serde_yaml::from_str("name: s\ntype: redis\nurl: ''").unwrap();
         assert!(check_store(&bad).is_err());
+        let bad: StoreConfig = serde_yaml::from_str(
+            "name: s
+type: redis
+url: 'not a url'",
+        )
+        .unwrap();
+        let err = check_store(&bad).unwrap_err();
+        assert!(
+            err.contains("store 's'") && err.contains("invalid url"),
+            "{err}"
+        );
+        assert_eq!(err.matches("store 's'").count(), 1, "{err}");
         let c: featherbit::consumers::ConsumerConfig =
             serde_yaml::from_str("name: c\ncredentials: { key-auth: { key: k } }").unwrap();
         check_consumer(&c).unwrap();
