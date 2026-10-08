@@ -1,0 +1,34 @@
+{{- if .Values.tests.enabled }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "featherbit-operator.fullname" . }}-test
+  labels:
+    {{- include "featherbit-operator.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: curl
+      image: {{ .Values.tests.image }}
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: ["ALL"]
+      command: ["sh", "-ec"]
+      args:
+        # The hook can start before kube-proxy has programmed the Service's
+        # endpoints for a pod that just turned Ready, so the request retries
+        # connection refusals and transient errors for up to ~30s.
+        - |
+          curl -fsS --retry 15 --retry-delay 2 --retry-connrefused --retry-all-errors \
+            "http://{{ include "featherbit-operator.fullname" . }}-metrics:{{ .Values.metrics.port }}/readyz"
+{{- end }}

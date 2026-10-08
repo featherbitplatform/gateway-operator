@@ -20,3 +20,22 @@ pub fn all_crds_yaml() -> String {
         .map(|c| format!("---\n{}", serde_yaml::to_string(c).expect("crd serializes")))
         .collect::<String>()
 }
+
+#[cfg(test)]
+mod tests {
+    /// The chart ships with the operator: its version and appVersion must
+    /// track the crate version, bumped in the same release commit.
+    #[test]
+    fn helm_chart_version_tracks_the_crate_version() {
+        let chart = include_str!("../../charts/featherbit-operator/Chart.yaml");
+        let v = env!("CARGO_PKG_VERSION");
+        assert!(
+            chart.lines().any(|l| l == format!("version: {v}")),
+            "Chart.yaml `version:` must be {v}"
+        );
+        assert!(
+            chart.lines().any(|l| l == format!("appVersion: \"{v}\"")),
+            "Chart.yaml `appVersion:` must be \"{v}\""
+        );
+    }
+}

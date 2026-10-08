@@ -1,0 +1,54 @@
+nameOverride: ""
+fullnameOverride: ""
+image:
+  repository: featherbit/operator
+  tag: ""          # defaults to appVersion
+  digest: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+# One replica only: the operator has no leader election yet.
+replicaCount: 1
+logging:
+  format: text     # text | json
+  level: info
+webhook:
+  port: 9443
+  failurePolicy: Fail
+  timeoutSeconds: 10
+  certManager:
+    enabled: false
+    issuerRef: { name: selfsigned, kind: Issuer }
+metrics:
+  port: 8080
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    labels: {}
+rbac:
+  create: true
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+podAnnotations: {}
+podLabels: {}
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile: { type: RuntimeDefault }
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities: { drop: ["ALL"] }
+resources:
+  requests: { cpu: 50m, memory: 64Mi }
+  limits: { memory: 256Mi }
+nodeSelector: {}
+tolerations: []
+affinity: {}
+priorityClassName: ""
+tests:
+  enabled: true
+  image: curlimages/curl:8.11.1
