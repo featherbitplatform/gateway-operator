@@ -1,0 +1,145 @@
+# Multi-arch Docker image to Docker Hub.
+#
+#   vX.Y.Z tag   -> X.Y.Z, X.Y
+#   develop push -> edge
+#   main push    -> only syncs the Docker Hub description (DOCKERHUB.md)
+#
+# Buildx publishes the linux/amd64 + linux/arm64 index with SBOM and
+# provenance attestations; on tags the CycloneDX SBOMs (crate + image) are
+# attached to the GitHub release.
+name: docker
+
+on:
+  push:
+    branches: [main, develop]
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: docker.io/${{ secrets.DOCKER_USERNAME }}/operator
+
+jobs:
+  publish:
+    name: build and push
+    if: github.ref != 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          flavor: |
+            latest=false
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=edge,enable=${{ github.ref == 'refs/heads/develop' }}
+
+      # A dispatch on an arbitrary branch, or a glob-matching non-semver tag,
+      # computes zero tags: fail before building.
+      - name: Guard against empty tag list
+        if: steps.meta.outputs.tags == ''
+        env:
+          GH_REF: ${{ github.ref }}
+        run: |
+          echo "::error::No Docker tags computed for $GH_REF - nothing to publish."
+          exit 1
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: true
+          sbom: true
+          cache-from: type=gha,scope=docker
+          cache-to: type=gha,scope=docker,mode=max
+
+      - name: Inspect manifest
+        run: docker buildx imagetools inspect "$(head -n1 <<< "$DOCKER_METADATA_OUTPUT_TAGS")"
+
+      - name: Resolve SBOM version
+        id: ver
+        env:
+          GH_REF: ${{ github.ref }}
+          GH_REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [[ "$GH_REF" == refs/tags/v* ]]; then
+            echo "version=${GH_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=edge" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Image SBOM from the published digest (the FROM scratch filesystem is
+      # inventoried through the crate list cargo-auditable embeds).
+      - name: Image SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          format: cyclonedx-json
+          output-file: sbom/featherbit-operator-image-${{ steps.ver.outputs.version }}.cdx.json
+          upload-artifact: false
+
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Crate SBOM
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          mkdir -p sbom
+          cargo install cargo-cyclonedx --locked
+          cargo cyclonedx --format json --override-filename featherbit-operator.cdx --all
+          mv featherbit-operator.cdx.json "sbom/featherbit-operator-${VERSION}.cdx.json"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom/
+
+      # Creates the release for the tag if none exists yet.
+      - name: Attach SBOMs to the GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: sbom/*.cdx.json
+
+  readme-sync:
+    name: sync Docker Hub description
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # Needs DOCKER_PASSWORD to be an account password or adequately scoped
+      # PAT; with a restricted access token this job fails while images still
+      # publish. Fix = rotate the secret.
+      - uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+          repository: ${{ secrets.DOCKER_USERNAME }}/operator
+          readme-filepath: ./DOCKERHUB.md
+          short-description: Kubernetes operator for the featherbit API gateway
