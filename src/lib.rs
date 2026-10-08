@@ -4,4 +4,6 @@
 pub mod crd;
 pub mod reconcile;
 pub mod sink;
+pub mod telemetry;
 pub mod validators;
+pub mod webhook;
