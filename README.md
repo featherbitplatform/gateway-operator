@@ -18,7 +18,7 @@ helm install featherbit-operator oci://ghcr.io/featherbitplatform/charts/feather
   --namespace featherbit-system --create-namespace
 
 # 2. A gateway that reads its gateway.yaml from the ConfigMap the operator will render
-#    (needs gateway chart >= 0.16, or `develop` until it is released)
+#    (needs gateway chart >= 0.16)
 helm install edge oci://ghcr.io/featherbitplatform/charts/featherbit-gateway \
   --namespace gateway-system --create-namespace \
   --set config.gatewayConfigMap=edge-gateway-config
