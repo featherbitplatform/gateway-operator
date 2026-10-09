@@ -35,7 +35,7 @@ jobs:
         with:
           fetch-depth: 0   # ct compares against the target branch
 
-      - uses: azure/setup-helm@v4
+      - uses: azure/setup-helm@v5
 
       - name: helm lint (every values file)
         run: |
@@ -101,7 +101,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: azure/setup-helm@v4
+      - uses: azure/setup-helm@v5
 
       - name: Chart version must equal the tag
         env:
