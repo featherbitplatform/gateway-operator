@@ -81,7 +81,7 @@ jobs:
           digest='${{ steps.build.outputs.digest }}'
           touch "${{ runner.temp }}/digests/${digest#sha256:}"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: digests-${{ env.PLATFORM_SLUG }}
           path: ${{ runner.temp }}/digests/*
@@ -190,7 +190,7 @@ jobs:
             --source-name featherbit-operator-image --source-version "$VERSION" \
             -o "cyclonedx-json=sbom/featherbit-operator-image-${VERSION}.cdx.json"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: sbom
           path: sbom/

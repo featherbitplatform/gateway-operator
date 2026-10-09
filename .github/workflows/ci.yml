@@ -48,7 +48,7 @@ jobs:
       - run: |
           cargo cyclonedx --format json --override-filename featherbit-operator.cdx --all
           mkdir -p sbom && mv featherbit-operator.cdx.json sbom/
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: sbom-crate
           path: sbom/
