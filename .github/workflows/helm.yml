@@ -137,6 +137,6 @@ jobs:
           helm push "dist/featherbit-operator-${VERSION}.tgz" "oci://registry-1.docker.io/${DOCKER_USERNAME}"
 
       # Same release the SBOMs attach to (docker.yml); created if missing.
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           files: dist/featherbit-operator-*.tgz
