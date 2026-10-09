@@ -1,6 +1,6 @@
 [package]
 name = "featherbit-operator"
-version = "0.1.0"
+version = "0.16.0"
 edition = "2021"
 publish = false
 description = "Kubernetes operator for the featherbit API gateway"
