@@ -1,0 +1,52 @@
+{{- if .Values.rbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "featherbit-operator.fullname" . }}
+  labels:
+    {{- include "featherbit-operator.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["featherbit.io"]
+    resources:
+      - routes
+      - policies
+      - supernodes
+      - pluginconfigs
+      - stores
+      - consumers
+      - featherbitgateways
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["featherbit.io"]
+    resources: ["routes/status", "policies/status", "supernodes/status", "pluginconfigs/status", "stores/status", "consumers/status", "featherbitgateways/status"]
+    verbs: ["get", "patch", "update"]
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch", "create", "patch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+  - apiGroups: ["events.k8s.io"]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "featherbit-operator.fullname" . }}
+  labels:
+    {{- include "featherbit-operator.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "featherbit-operator.fullname" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "featherbit-operator.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

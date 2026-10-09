@@ -1,0 +1,127 @@
+name: security
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+  schedule:
+    - cron: "17 4 * * 1" # weekly: new advisories against an unchanged tree
+  workflow_dispatch:
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  cargo-deny: # advisories, licenses, bans, sources (deny.toml)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+
+  grype-lockfile: # CVEs in Cargo.lock
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: anchore/scan-action@v7
+        id: scan
+        with:
+          path: "."
+          fail-build: true
+          severity-cutoff: high
+          output-format: sarif
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: ${{ steps.scan.outputs.sarif }}
+          category: grype-lockfile
+
+  semgrep:
+    runs-on: ubuntu-24.04
+    container: semgrep/semgrep
+    steps:
+      - uses: actions/checkout@v4
+      - run: semgrep ci --config p/rust --config p/secrets --config p/docker --sarif --output semgrep.sarif || true
+      - uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+
+  gitleaks:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # Container instead of gitleaks-action: the action needs a paid license
+      # for organization-owned repositories. Same invocation as dev/sast.sh.
+      - run: >-
+          docker run --rm -v "$PWD:/src" zricethezav/gitleaks:latest
+          dir /src --config /src/.gitleaks.toml --no-banner --redact
+          --report-format sarif --report-path /src/gitleaks.sarif
+
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: gitleaks.sarif
+          category: gitleaks
+
+  hadolint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hadolint/hadolint-action@v3.3.0
+        with:
+          dockerfile: Dockerfile
+          config: .hadolint.yaml
+
+  image-scan: # grype + trivy on the built image, plus the image SBOM
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: featherbit-operator:sast
+          cache-from: type=gha,scope=security-image
+          cache-to: type=gha,scope=security-image,mode=max
+      # sbom-action writes to output-file without creating its directory.
+      - run: mkdir -p sbom
+      - uses: anchore/sbom-action@v0
+        with:
+          image: featherbit-operator:sast
+          format: cyclonedx-json
+          output-file: sbom/featherbit-operator-image.cdx.json
+          artifact-name: sbom-image
+          upload-artifact: true
+      - uses: anchore/scan-action@v7
+        id: grype
+        with:
+          image: featherbit-operator:sast
+          fail-build: true
+          severity-cutoff: high
+          output-format: sarif
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: ${{ steps.grype.outputs.sarif }}
+          category: grype-image
+      - uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: featherbit-operator:sast
+          format: sarif
+          output: trivy.sarif
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          trivy-config: trivy.yaml
+          trivyignores: .trivyignore.yaml
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy.sarif
+          category: trivy-image

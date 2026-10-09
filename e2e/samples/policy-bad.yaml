@@ -1,0 +1,27 @@
+# The webhook must reject this: the cors node's `preflight` port is unwired.
+apiVersion: featherbit.io/v1alpha1
+kind: Policy
+metadata:
+  name: bad-cors
+  namespace: shop
+spec:
+  nodes:
+    - id: listener
+      type: listener
+    - id: cors
+      type: cors
+      config:
+        allow_origins: "*"
+    - id: mock
+      type: mocking
+      config:
+        response_example: "{}"
+    - id: client
+      type: client
+  edges:
+    - from: listener.out
+      to: cors.in
+    - from: cors.success
+      to: mock.in
+    - from: mock.success
+      to: client.in

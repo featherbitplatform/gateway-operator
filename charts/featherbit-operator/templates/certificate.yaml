@@ -1,0 +1,16 @@
+{{- if .Values.webhook.certManager.enabled }}
+{{- $svc := include "featherbit-operator.webhookServiceName" . }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "featherbit-operator.fullname" . }}-webhook
+  labels:
+    {{- include "featherbit-operator.labels" . | nindent 4 }}
+spec:
+  secretName: {{ include "featherbit-operator.webhookSecretName" . }}
+  dnsNames:
+    - {{ $svc }}.{{ .Release.Namespace }}.svc
+    - {{ $svc }}.{{ .Release.Namespace }}.svc.cluster.local
+  issuerRef:
+    {{- toYaml .Values.webhook.certManager.issuerRef | nindent 4 }}
+{{- end }}

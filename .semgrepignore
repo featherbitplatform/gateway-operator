@@ -1,0 +1,8 @@
+# semgrep exclusions — vendored, generated, and scanner-output trees.
+# Markdown is prose: sample keys in docs are examples, not code.
+*.md
+target/
+sast-out/
+sbom/
+.worktrees/
+.superpowers/

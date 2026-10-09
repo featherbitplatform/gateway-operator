@@ -1,0 +1,9 @@
+target
+.git
+.worktrees
+.superpowers
+charts
+docs
+e2e
+sast-out
+sbom

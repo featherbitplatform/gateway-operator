@@ -1,0 +1,5 @@
+# hadolint configuration — Dockerfile linting. Errors fail the scan; warnings
+# (e.g. DL3018, unpinned `apk add`) are reported but do not block.
+failure-threshold: error
+
+ignored: []

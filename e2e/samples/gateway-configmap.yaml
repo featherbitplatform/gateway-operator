@@ -1,0 +1,14 @@
+# File-mode gateway: the operator renders gateway.yaml into the ConfigMap that
+# the gateway chart mounts (config.gatewayConfigMap).
+apiVersion: featherbit.io/v1alpha1
+kind: FeatherbitGateway
+metadata:
+  name: edge
+  namespace: gw
+spec:
+  sink:
+    configMap:
+      name: edge-gateway-config
+  resources:
+    namespaces:
+      from: All
