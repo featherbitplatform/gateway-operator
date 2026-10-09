@@ -21,16 +21,12 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
-      GATEWAY_CHART: gateway/charts/featherbit-gateway
+      # The script installs the published gateway chart (oci://ghcr.io/featherbitplatform/charts/
+      # featherbit-gateway, version pinned in e2e/run.sh). To test an unreleased gateway chart, check
+      # out featherbitplatform/gateway here and set GATEWAY_CHART to its charts/featherbit-gateway path.
       KEEP_CLUSTER: "1"   # the runner is discarded; keeps the cluster for the failure collection step
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/checkout@v4
-        with:
-          repository: featherbitplatform/gateway
-          ref: develop
-          path: gateway
 
       - uses: azure/setup-helm@v4
 

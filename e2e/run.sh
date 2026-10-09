@@ -3,23 +3,28 @@
 #
 # Needs docker, kind, helm and kubectl. Env overrides:
 #   CLUSTER                kind cluster name
-#   GATEWAY_CHART          gateway chart; must have config.gatewayConfigMap (gateway develop,
-#                          released after 0.15.0). Local path or CI checkout of featherbitplatform/gateway.
-#   GATEWAY_CHART_VERSION  only for an OCI GATEWAY_CHART (oci://ghcr.io/featherbitplatform/charts/featherbit-gateway)
-#                          once a release contains config.gatewayConfigMap; ignored for a path.
-#   GATEWAY_IMAGE_TAG      gateway image tag (edge is published on gateway develop pushes)
+#   GATEWAY_CHART          gateway chart: an OCI reference (default: the published chart) or a local
+#                          path to a checkout of featherbitplatform/gateway. Needs config.gatewayConfigMap
+#                          (gateway chart >= 0.16).
+#   GATEWAY_CHART_VERSION  chart version for an OCI GATEWAY_CHART (default 0.16.0); ignored for a path.
+#   GATEWAY_IMAGE_TAG      gateway image tag override; empty (default) uses the chart's appVersion.
+#                          Use `edge` with a develop checkout of the chart.
 set -euo pipefail
 # Git Bash (Windows) rewrites arguments that look like POSIX paths, which turned
 # `--set config.etcd.prefix=/e2e` into `C:/Program Files/Git/e2e`. No-op elsewhere.
 export MSYS_NO_PATHCONV=1
 cd "$(dirname "$0")/.."
 CLUSTER=${CLUSTER:-fb-operator-e2e}
-# Default: sibling checkout of the gateway repo on develop (override with the path of a develop checkout).
-GATEWAY_CHART=${GATEWAY_CHART:-../gateway/charts/featherbit-gateway}
-GATEWAY_IMAGE_TAG=${GATEWAY_IMAGE_TAG:-edge}
+# Default: the published gateway chart (override with a local path to test an unreleased chart).
+GATEWAY_CHART=${GATEWAY_CHART:-oci://ghcr.io/featherbitplatform/charts/featherbit-gateway}
+GATEWAY_IMAGE_TAG=${GATEWAY_IMAGE_TAG:-}
 IMAGE=featherbit-operator:e2e
 CHART_VERSION_ARGS=()
-if [ -n "${GATEWAY_CHART_VERSION:-}" ]; then CHART_VERSION_ARGS=(--version "$GATEWAY_CHART_VERSION"); fi
+case "$GATEWAY_CHART" in
+  oci://*) CHART_VERSION_ARGS=(--version "${GATEWAY_CHART_VERSION:-0.16.0}") ;;
+esac
+IMAGE_TAG_ARGS=()
+if [ -n "$GATEWAY_IMAGE_TAG" ]; then IMAGE_TAG_ARGS=(--set "image.tag=$GATEWAY_IMAGE_TAG"); fi
 PF_PIDS=()
 
 # Mirrored by the "Collect cluster state" step of .github/workflows/e2e.yml.
@@ -65,7 +70,7 @@ helm install op charts/featherbit-operator -n gw \
 # 1. Happy path (ConfigMap sink). The ConfigMap is optional at pod start, so
 #    the gateway comes up before the operator has rendered anything.
 helm install edge "$GATEWAY_CHART" ${CHART_VERSION_ARGS[@]+"${CHART_VERSION_ARGS[@]}"} -n gw \
-  --set image.tag="$GATEWAY_IMAGE_TAG" \
+  ${IMAGE_TAG_ARGS[@]+"${IMAGE_TAG_ARGS[@]}"} \
   --set config.gatewayConfigMap=edge-gateway-config --set tests.dataPlanePath="" \
   --wait --timeout 180s
 
@@ -100,7 +105,7 @@ curl -fsS "http://localhost:18080/hello" | grep -q operator || fail "/hello stop
 kubectl apply -f e2e/samples/etcd.yaml
 kubectl -n gw rollout status deploy/etcd --timeout=120s
 helm install edge-etcd "$GATEWAY_CHART" ${CHART_VERSION_ARGS[@]+"${CHART_VERSION_ARGS[@]}"} -n gw \
-  --set image.tag="$GATEWAY_IMAGE_TAG" \
+  ${IMAGE_TAG_ARGS[@]+"${IMAGE_TAG_ARGS[@]}"} \
   --set config.source=etcd --set 'config.etcd.endpoints[0]=http://etcd.gw.svc:2379' --set config.etcd.prefix=/e2e \
   --set-string config.gatewayRaw='routes: []' --set replicaCount=2 --set tests.dataPlanePath="" \
   --wait --timeout 180s
