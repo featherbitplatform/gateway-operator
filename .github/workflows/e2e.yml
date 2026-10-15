@@ -26,7 +26,7 @@ jobs:
       # out featherbitplatform/gateway here and set GATEWAY_CHART to its charts/featherbit-gateway path.
       KEEP_CLUSTER: "1"   # the runner is discarded; keeps the cluster for the failure collection step
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: azure/setup-helm@v4
 
