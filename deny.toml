@@ -17,6 +17,13 @@ ignore = [
     # rustls-pemfile is unmaintained (archived 2025-08); pulled in via
     # axum-server 0.7 (our TLS listener). Revisit when axum-server drops it.
     "RUSTSEC-2025-0134",
+    # unsafe-libyaml is unmaintained; it is the C-port backing serde_yaml 0.9,
+    # the operator's own YAML crate (tests, CRD emission, gateway.yaml
+    # rendering). The gateway dropped it in 0.18.0 for `featherbit::yaml`;
+    # switching the operator to that module changes the generated CRD text
+    # and the rendered ConfigMap layout, so it is tracked as its own change.
+    # Remove this entry with that switch.
+    "RUSTSEC-2024-0449",
 ]
 
 [licenses]
