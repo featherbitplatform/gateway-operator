@@ -6,7 +6,7 @@
 #   GATEWAY_CHART          gateway chart: an OCI reference (default: the published chart) or a local
 #                          path to a checkout of featherbitplatform/gateway. Needs config.gatewayConfigMap
 #                          (gateway chart >= 0.16).
-#   GATEWAY_CHART_VERSION  chart version for an OCI GATEWAY_CHART (default 0.17.0); ignored for a path.
+#   GATEWAY_CHART_VERSION  chart version for an OCI GATEWAY_CHART (default 0.18.0); ignored for a path.
 #   GATEWAY_IMAGE_TAG      gateway image tag override; empty (default) uses the chart's appVersion.
 #                          Use `edge` with a develop checkout of the chart.
 set -euo pipefail
@@ -21,7 +21,7 @@ GATEWAY_IMAGE_TAG=${GATEWAY_IMAGE_TAG:-}
 IMAGE=featherbit-operator:e2e
 CHART_VERSION_ARGS=()
 case "$GATEWAY_CHART" in
-  oci://*) CHART_VERSION_ARGS=(--version "${GATEWAY_CHART_VERSION:-0.17.0}") ;;
+  oci://*) CHART_VERSION_ARGS=(--version "${GATEWAY_CHART_VERSION:-0.18.0}") ;;
 esac
 IMAGE_TAG_ARGS=()
 if [ -n "$GATEWAY_IMAGE_TAG" ]; then IMAGE_TAG_ARGS=(--set "image.tag=$GATEWAY_IMAGE_TAG"); fi
