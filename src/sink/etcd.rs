@@ -49,7 +49,7 @@ mod tests {
     use k8s_openapi::ByteString;
 
     fn sink(yaml: &str) -> EtcdSink {
-        serde_yaml::from_str(yaml).unwrap()
+        featherbit::yaml::from_str(yaml).unwrap()
     }
 
     fn secret(keys: &[(&str, &str)]) -> Secret {

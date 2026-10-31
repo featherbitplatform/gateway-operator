@@ -216,7 +216,7 @@ mod tests {
                 created: None,
             },
             spec: SpecBody {
-                body: serde_yaml::from_str(yaml).unwrap(),
+                body: featherbit::yaml::from_str(yaml).unwrap(),
             },
             labels: Default::default(),
         }

@@ -275,7 +275,7 @@ mod tests {
     use super::*;
 
     fn spec(yaml: &str) -> FeatherbitGatewaySpec {
-        serde_yaml::from_str(yaml).unwrap()
+        featherbit::yaml::from_str(yaml).unwrap()
     }
 
     #[test]

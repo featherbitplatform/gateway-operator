@@ -39,7 +39,7 @@ spec:
             description: Binds a request match rule to a named policy.
             properties:
               match:
-                description: 'Conditions a request must satisfy (YAML key: `match`).'
+                description: "Conditions a request must satisfy (YAML key: `match`)."
                 properties:
                   headers:
                     additionalProperties:
@@ -86,21 +86,36 @@ spec:
               conditions:
                 default: []
                 items:
-                  description: Condition contains details for one aspect of the current state of this API Resource.
+                  description: >-
+                    Condition contains details for one aspect of the current state of this API
+                    Resource.
                   properties:
                     lastTransitionTime:
-                      description: lastTransitionTime is the last time the condition transitioned from one status to another. This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      description: >-
+                        lastTransitionTime is the last time the condition transitioned from one status
+                        to another. This should be when the underlying condition changed.  If that is not
+                        known, then using the time when the API field changed is acceptable.
                       format: date-time
                       type: string
                     message:
-                      description: message is a human readable message indicating details about the transition. This may be an empty string.
+                      description: >-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
                       type: string
                     observedGeneration:
-                      description: observedGeneration represents the .metadata.generation that the condition was set based upon. For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date with respect to the current state of the instance.
+                      description: >-
+                        observedGeneration represents the .metadata.generation that the condition was
+                        set based upon. For instance, if .metadata.generation is currently 12, but the
+                        .status.conditions[x].observedGeneration is 9, the condition is out of date with
+                        respect to the current state of the instance.
                       format: int64
                       type: integer
                     reason:
-                      description: reason contains a programmatic identifier indicating the reason for the condition's last transition. Producers of specific condition types may define expected values and meanings for this field, and whether the values are considered a guaranteed API. The value should be a CamelCase string. This field may not be empty.
+                      description: >-
+                        reason contains a programmatic identifier indicating the reason for the
+                        condition's last transition. Producers of specific condition types may define expected
+                        values and meanings for this field, and whether the values are considered a
+                        guaranteed API. The value should be a CamelCase string. This field may not be empty.
                       type: string
                     status:
                       description: status of the condition, one of True, False, Unknown.
@@ -204,7 +219,9 @@ spec:
                   type: object
                 type: array
               error_handler:
-                description: Optional id of a node to jump to when a node errors without an explicit error edge.
+                description: >-
+                  Optional id of a node to jump to when a node errors without an explicit error
+                  edge.
                 nullable: true
                 type: string
               nodes:
@@ -263,21 +280,36 @@ spec:
               conditions:
                 default: []
                 items:
-                  description: Condition contains details for one aspect of the current state of this API Resource.
+                  description: >-
+                    Condition contains details for one aspect of the current state of this API
+                    Resource.
                   properties:
                     lastTransitionTime:
-                      description: lastTransitionTime is the last time the condition transitioned from one status to another. This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      description: >-
+                        lastTransitionTime is the last time the condition transitioned from one status
+                        to another. This should be when the underlying condition changed.  If that is not
+                        known, then using the time when the API field changed is acceptable.
                       format: date-time
                       type: string
                     message:
-                      description: message is a human readable message indicating details about the transition. This may be an empty string.
+                      description: >-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
                       type: string
                     observedGeneration:
-                      description: observedGeneration represents the .metadata.generation that the condition was set based upon. For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date with respect to the current state of the instance.
+                      description: >-
+                        observedGeneration represents the .metadata.generation that the condition was
+                        set based upon. For instance, if .metadata.generation is currently 12, but the
+                        .status.conditions[x].observedGeneration is 9, the condition is out of date with
+                        respect to the current state of the instance.
                       format: int64
                       type: integer
                     reason:
-                      description: reason contains a programmatic identifier indicating the reason for the condition's last transition. Producers of specific condition types may define expected values and meanings for this field, and whether the values are considered a guaranteed API. The value should be a CamelCase string. This field may not be empty.
+                      description: >-
+                        reason contains a programmatic identifier indicating the reason for the
+                        condition's last transition. Producers of specific condition types may define expected
+                        values and meanings for this field, and whether the values are considered a
+                        guaranteed API. The value should be a CamelCase string. This field may not be empty.
                       type: string
                     status:
                       description: status of the condition, one of True, False, Unknown.
@@ -451,21 +483,36 @@ spec:
               conditions:
                 default: []
                 items:
-                  description: Condition contains details for one aspect of the current state of this API Resource.
+                  description: >-
+                    Condition contains details for one aspect of the current state of this API
+                    Resource.
                   properties:
                     lastTransitionTime:
-                      description: lastTransitionTime is the last time the condition transitioned from one status to another. This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      description: >-
+                        lastTransitionTime is the last time the condition transitioned from one status
+                        to another. This should be when the underlying condition changed.  If that is not
+                        known, then using the time when the API field changed is acceptable.
                       format: date-time
                       type: string
                     message:
-                      description: message is a human readable message indicating details about the transition. This may be an empty string.
+                      description: >-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
                       type: string
                     observedGeneration:
-                      description: observedGeneration represents the .metadata.generation that the condition was set based upon. For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date with respect to the current state of the instance.
+                      description: >-
+                        observedGeneration represents the .metadata.generation that the condition was
+                        set based upon. For instance, if .metadata.generation is currently 12, but the
+                        .status.conditions[x].observedGeneration is 9, the condition is out of date with
+                        respect to the current state of the instance.
                       format: int64
                       type: integer
                     reason:
-                      description: reason contains a programmatic identifier indicating the reason for the condition's last transition. Producers of specific condition types may define expected values and meanings for this field, and whether the values are considered a guaranteed API. The value should be a CamelCase string. This field may not be empty.
+                      description: >-
+                        reason contains a programmatic identifier indicating the reason for the
+                        condition's last transition. Producers of specific condition types may define expected
+                        values and meanings for this field, and whether the values are considered a
+                        guaranteed API. The value should be a CamelCase string. This field may not be empty.
                       type: string
                     status:
                       description: status of the condition, one of True, False, Unknown.
@@ -570,21 +617,36 @@ spec:
               conditions:
                 default: []
                 items:
-                  description: Condition contains details for one aspect of the current state of this API Resource.
+                  description: >-
+                    Condition contains details for one aspect of the current state of this API
+                    Resource.
                   properties:
                     lastTransitionTime:
-                      description: lastTransitionTime is the last time the condition transitioned from one status to another. This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      description: >-
+                        lastTransitionTime is the last time the condition transitioned from one status
+                        to another. This should be when the underlying condition changed.  If that is not
+                        known, then using the time when the API field changed is acceptable.
                       format: date-time
                       type: string
                     message:
-                      description: message is a human readable message indicating details about the transition. This may be an empty string.
+                      description: >-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
                       type: string
                     observedGeneration:
-                      description: observedGeneration represents the .metadata.generation that the condition was set based upon. For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date with respect to the current state of the instance.
+                      description: >-
+                        observedGeneration represents the .metadata.generation that the condition was
+                        set based upon. For instance, if .metadata.generation is currently 12, but the
+                        .status.conditions[x].observedGeneration is 9, the condition is out of date with
+                        respect to the current state of the instance.
                       format: int64
                       type: integer
                     reason:
-                      description: reason contains a programmatic identifier indicating the reason for the condition's last transition. Producers of specific condition types may define expected values and meanings for this field, and whether the values are considered a guaranteed API. The value should be a CamelCase string. This field may not be empty.
+                      description: >-
+                        reason contains a programmatic identifier indicating the reason for the
+                        condition's last transition. Producers of specific condition types may define expected
+                        values and meanings for this field, and whether the values are considered a
+                        guaranteed API. The value should be a CamelCase string. This field may not be empty.
                       type: string
                     status:
                       description: status of the condition, one of True, False, Unknown.
@@ -743,21 +805,36 @@ spec:
               conditions:
                 default: []
                 items:
-                  description: Condition contains details for one aspect of the current state of this API Resource.
+                  description: >-
+                    Condition contains details for one aspect of the current state of this API
+                    Resource.
                   properties:
                     lastTransitionTime:
-                      description: lastTransitionTime is the last time the condition transitioned from one status to another. This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      description: >-
+                        lastTransitionTime is the last time the condition transitioned from one status
+                        to another. This should be when the underlying condition changed.  If that is not
+                        known, then using the time when the API field changed is acceptable.
                       format: date-time
                       type: string
                     message:
-                      description: message is a human readable message indicating details about the transition. This may be an empty string.
+                      description: >-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
                       type: string
                     observedGeneration:
-                      description: observedGeneration represents the .metadata.generation that the condition was set based upon. For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date with respect to the current state of the instance.
+                      description: >-
+                        observedGeneration represents the .metadata.generation that the condition was
+                        set based upon. For instance, if .metadata.generation is currently 12, but the
+                        .status.conditions[x].observedGeneration is 9, the condition is out of date with
+                        respect to the current state of the instance.
                       format: int64
                       type: integer
                     reason:
-                      description: reason contains a programmatic identifier indicating the reason for the condition's last transition. Producers of specific condition types may define expected values and meanings for this field, and whether the values are considered a guaranteed API. The value should be a CamelCase string. This field may not be empty.
+                      description: >-
+                        reason contains a programmatic identifier indicating the reason for the
+                        condition's last transition. Producers of specific condition types may define expected
+                        values and meanings for this field, and whether the values are considered a
+                        guaranteed API. The value should be a CamelCase string. This field may not be empty.
                       type: string
                     status:
                       description: status of the condition, one of True, False, Unknown.
@@ -872,21 +949,36 @@ spec:
               conditions:
                 default: []
                 items:
-                  description: Condition contains details for one aspect of the current state of this API Resource.
+                  description: >-
+                    Condition contains details for one aspect of the current state of this API
+                    Resource.
                   properties:
                     lastTransitionTime:
-                      description: lastTransitionTime is the last time the condition transitioned from one status to another. This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      description: >-
+                        lastTransitionTime is the last time the condition transitioned from one status
+                        to another. This should be when the underlying condition changed.  If that is not
+                        known, then using the time when the API field changed is acceptable.
                       format: date-time
                       type: string
                     message:
-                      description: message is a human readable message indicating details about the transition. This may be an empty string.
+                      description: >-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
                       type: string
                     observedGeneration:
-                      description: observedGeneration represents the .metadata.generation that the condition was set based upon. For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date with respect to the current state of the instance.
+                      description: >-
+                        observedGeneration represents the .metadata.generation that the condition was
+                        set based upon. For instance, if .metadata.generation is currently 12, but the
+                        .status.conditions[x].observedGeneration is 9, the condition is out of date with
+                        respect to the current state of the instance.
                       format: int64
                       type: integer
                     reason:
-                      description: reason contains a programmatic identifier indicating the reason for the condition's last transition. Producers of specific condition types may define expected values and meanings for this field, and whether the values are considered a guaranteed API. The value should be a CamelCase string. This field may not be empty.
+                      description: >-
+                        reason contains a programmatic identifier indicating the reason for the
+                        condition's last transition. Producers of specific condition types may define expected
+                        values and meanings for this field, and whether the values are considered a
+                        guaranteed API. The value should be a CamelCase string. This field may not be empty.
                       type: string
                     status:
                       description: status of the condition, one of True, False, Unknown.
@@ -987,22 +1079,34 @@ spec:
                         - Selector
                         type: string
                       selector:
-                        description: A label selector is a label query over a set of resources. The result of matchLabels and matchExpressions are ANDed. An empty label selector matches all objects. A null label selector matches no objects.
+                        description: >-
+                          A label selector is a label query over a set of resources. The result of
+                          matchLabels and matchExpressions are ANDed. An empty label selector matches all
+                          objects. A null label selector matches no objects.
                         nullable: true
                         properties:
                           matchExpressions:
-                            description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                            description: >-
+                              matchExpressions is a list of label selector requirements. The requirements are
+                              ANDed.
                             items:
-                              description: A label selector requirement is a selector that contains values, a key, and an operator that relates the key and values.
+                              description: >-
+                                A label selector requirement is a selector that contains values, a key, and an
+                                operator that relates the key and values.
                               properties:
                                 key:
                                   description: key is the label key that the selector applies to.
                                   type: string
                                 operator:
-                                  description: operator represents a key's relationship to a set of values. Valid operators are In, NotIn, Exists and DoesNotExist.
+                                  description: >-
+                                    operator represents a key's relationship to a set of values. Valid operators
+                                    are In, NotIn, Exists and DoesNotExist.
                                   type: string
                                 values:
-                                  description: values is an array of string values. If the operator is In or NotIn, the values array must be non-empty. If the operator is Exists or DoesNotExist, the values array must be empty. This array is replaced during a strategic merge patch.
+                                  description: >-
+                                    values is an array of string values. If the operator is In or NotIn, the values
+                                    array must be non-empty. If the operator is Exists or DoesNotExist, the values
+                                    array must be empty. This array is replaced during a strategic merge patch.
                                   items:
                                     type: string
                                   type: array
@@ -1014,7 +1118,11 @@ spec:
                           matchLabels:
                             additionalProperties:
                               type: string
-                            description: matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels map is equivalent to an element of matchExpressions, whose key field is "key", the operator is "In", and the values array contains only "value". The requirements are ANDed.
+                            description: >-
+                              matchLabels is a map of {key,value} pairs. A single {key,value} in the
+                              matchLabels map is equivalent to an element of matchExpressions, whose key field is
+                              "key", the operator is "In", and the values array contains only "value". The
+                              requirements are ANDed.
                             type: object
                         type: object
                     type: object
@@ -1023,18 +1131,27 @@ spec:
                     nullable: true
                     properties:
                       matchExpressions:
-                        description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                        description: >-
+                          matchExpressions is a list of label selector requirements. The requirements are
+                          ANDed.
                         items:
-                          description: A label selector requirement is a selector that contains values, a key, and an operator that relates the key and values.
+                          description: >-
+                            A label selector requirement is a selector that contains values, a key, and an
+                            operator that relates the key and values.
                           properties:
                             key:
                               description: key is the label key that the selector applies to.
                               type: string
                             operator:
-                              description: operator represents a key's relationship to a set of values. Valid operators are In, NotIn, Exists and DoesNotExist.
+                              description: >-
+                                operator represents a key's relationship to a set of values. Valid operators
+                                are In, NotIn, Exists and DoesNotExist.
                               type: string
                             values:
-                              description: values is an array of string values. If the operator is In or NotIn, the values array must be non-empty. If the operator is Exists or DoesNotExist, the values array must be empty. This array is replaced during a strategic merge patch.
+                              description: >-
+                                values is an array of string values. If the operator is In or NotIn, the values
+                                array must be non-empty. If the operator is Exists or DoesNotExist, the values
+                                array must be empty. This array is replaced during a strategic merge patch.
                               items:
                                 type: string
                               type: array
@@ -1046,7 +1163,11 @@ spec:
                       matchLabels:
                         additionalProperties:
                           type: string
-                        description: matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels map is equivalent to an element of matchExpressions, whose key field is "key", the operator is "In", and the values array contains only "value". The requirements are ANDed.
+                        description: >-
+                          matchLabels is a map of {key,value} pairs. A single {key,value} in the
+                          matchLabels map is equivalent to an element of matchExpressions, whose key field is
+                          "key", the operator is "In", and the values array contains only "value". The
+                          requirements are ANDed.
                         type: object
                     type: object
                 type: object
@@ -1067,7 +1188,9 @@ spec:
                     nullable: true
                     properties:
                       credentialsSecretRef:
-                        description: Secret with keys `user` and `password` (same shape as the chart's `config.etcd.existingSecret`).
+                        description: >-
+                          Secret with keys `user` and `password` (same shape as the chart's
+                          `config.etcd.existingSecret`).
                         nullable: true
                         properties:
                           name:
@@ -1100,21 +1223,36 @@ spec:
               conditions:
                 default: []
                 items:
-                  description: Condition contains details for one aspect of the current state of this API Resource.
+                  description: >-
+                    Condition contains details for one aspect of the current state of this API
+                    Resource.
                   properties:
                     lastTransitionTime:
-                      description: lastTransitionTime is the last time the condition transitioned from one status to another. This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      description: >-
+                        lastTransitionTime is the last time the condition transitioned from one status
+                        to another. This should be when the underlying condition changed.  If that is not
+                        known, then using the time when the API field changed is acceptable.
                       format: date-time
                       type: string
                     message:
-                      description: message is a human readable message indicating details about the transition. This may be an empty string.
+                      description: >-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
                       type: string
                     observedGeneration:
-                      description: observedGeneration represents the .metadata.generation that the condition was set based upon. For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date with respect to the current state of the instance.
+                      description: >-
+                        observedGeneration represents the .metadata.generation that the condition was
+                        set based upon. For instance, if .metadata.generation is currently 12, but the
+                        .status.conditions[x].observedGeneration is 9, the condition is out of date with
+                        respect to the current state of the instance.
                       format: int64
                       type: integer
                     reason:
-                      description: reason contains a programmatic identifier indicating the reason for the condition's last transition. Producers of specific condition types may define expected values and meanings for this field, and whether the values are considered a guaranteed API. The value should be a CamelCase string. This field may not be empty.
+                      description: >-
+                        reason contains a programmatic identifier indicating the reason for the
+                        condition's last transition. Producers of specific condition types may define expected
+                        values and meanings for this field, and whether the values are considered a
+                        guaranteed API. The value should be a CamelCase string. This field may not be empty.
                       type: string
                     status:
                       description: status of the condition, one of True, False, Unknown.
@@ -1181,7 +1319,10 @@ spec:
                 - supernodes
                 type: object
               lastRenderedAt:
-                description: Time is a wrapper around time.Time which supports correct marshaling to YAML and JSON.  Wrappers are provided for many of the factory methods that the time package offers.
+                description: >-
+                  Time is a wrapper around time.Time which supports correct marshaling to YAML
+                  and JSON.  Wrappers are provided for many of the factory methods that the time
+                  package offers.
                 format: date-time
                 nullable: true
                 type: string
