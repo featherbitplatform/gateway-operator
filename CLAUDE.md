@@ -5,6 +5,7 @@ Kubernetes operator for the featherbit API gateway (`featherbitplatform/gateway`
 ## Conventions
 - Gitflow (`develop`, `feature/*`, `release/*`, `hotfix/*`) and Conventional Commits, same as the gateway. No `Co-Authored-By` trailers.
 - The `featherbit` crate is a git dependency pinned in `Cargo.toml`; its public surface is pinned by the gateway's `tests/lib_surface.rs`. Validation logic is never reimplemented here — call the gateway's validators.
+- YAML is parsed and emitted only through `featherbit::yaml` (`from_str` / `to_string`), the gateway's own parser, so CRD specs and rendered `gateway.yaml` read exactly as the gateway reads them; never add a YAML crate. `crd::all_crds_yaml` post-processes the emitter's text (quotes YAML 1.1 boolean tokens, blanks whitespace-only lines) and its tests pin that the result parses back to the registered CRDs.
 
 ## Commands
 ```bash

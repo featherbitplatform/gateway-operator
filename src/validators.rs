@@ -12,7 +12,7 @@ use featherbit::consumers::{ConsumerConfig, ConsumerStore};
 const BOUNDARY_TYPES: [&str; 3] = ["input", "output", "error"];
 
 pub fn empty_config() -> GatewayConfig {
-    serde_yaml::from_str("{}").expect("empty config parses")
+    featherbit::yaml::from_str("{}").expect("empty config parses")
 }
 
 fn known_node_type(t: &str) -> bool {
@@ -153,7 +153,7 @@ pub(crate) mod tests {
     use super::*;
 
     fn policy(yaml: &str) -> PolicyConfig {
-        serde_yaml::from_str(yaml).unwrap()
+        featherbit::yaml::from_str(yaml).unwrap()
     }
 
     const OK: &str = r#"
@@ -286,7 +286,7 @@ edges:
             .unwrap_err()
             .contains("shared-mock"));
         shared.plugin_configs.push(
-            serde_yaml::from_str(
+            featherbit::yaml::from_str(
                 "name: shared-mock\ntype: mocking\nconfig: { response_example: '{}' }",
             )
             .unwrap(),
@@ -297,27 +297,29 @@ edges:
     #[test]
     fn check_route_rejects_bad_host_and_empty_policy() {
         let r: RouteConfig =
-            serde_yaml::from_str("name: r\nmatch: { path: /a, host: '*' }\npolicy: p").unwrap();
+            featherbit::yaml::from_str("name: r\nmatch: { path: /a, host: '*' }\npolicy: p")
+                .unwrap();
         assert!(check_route(&r).is_err());
         let r: RouteConfig =
-            serde_yaml::from_str("name: r\nmatch: { path: /a }\npolicy: ''").unwrap();
+            featherbit::yaml::from_str("name: r\nmatch: { path: /a }\npolicy: ''").unwrap();
         assert!(check_route(&r).unwrap_err().contains("policy"));
     }
 
     #[test]
     fn check_plugin_config_rejects_unknown_type() {
-        let pc: PluginConfigDef = serde_yaml::from_str("name: x\ntype: nope\nconfig: {}").unwrap();
+        let pc: PluginConfigDef =
+            featherbit::yaml::from_str("name: x\ntype: nope\nconfig: {}").unwrap();
         assert!(check_plugin_config(&pc).unwrap_err().contains("nope"));
     }
 
     #[test]
     fn check_store_and_consumer_delegate_to_the_gateway() {
         let s: StoreConfig =
-            serde_yaml::from_str("name: s\ntype: redis\nurl: 'redis://r:6379'").unwrap();
+            featherbit::yaml::from_str("name: s\ntype: redis\nurl: 'redis://r:6379'").unwrap();
         check_store(&s).unwrap();
-        let bad: StoreConfig = serde_yaml::from_str("name: s\ntype: redis\nurl: ''").unwrap();
+        let bad: StoreConfig = featherbit::yaml::from_str("name: s\ntype: redis\nurl: ''").unwrap();
         assert!(check_store(&bad).is_err());
-        let bad: StoreConfig = serde_yaml::from_str(
+        let bad: StoreConfig = featherbit::yaml::from_str(
             "name: s
 type: redis
 url: 'not a url'",
@@ -330,13 +332,14 @@ url: 'not a url'",
         );
         assert_eq!(err.matches("store 's'").count(), 1, "{err}");
         let c: featherbit::consumers::ConsumerConfig =
-            serde_yaml::from_str("name: c\ncredentials: { key-auth: { key: k } }").unwrap();
+            featherbit::yaml::from_str("name: c\ncredentials: { key-auth: { key: k } }").unwrap();
         check_consumer(&c).unwrap();
     }
 
     #[test]
     fn check_supernode_requires_boundaries() {
-        let sn: SupernodeConfig = serde_yaml::from_str("name: sn\nnodes: []\nedges: []").unwrap();
+        let sn: SupernodeConfig =
+            featherbit::yaml::from_str("name: sn\nnodes: []\nedges: []").unwrap();
         assert!(check_supernode(&sn).is_err());
     }
 }

@@ -13,7 +13,7 @@ pub struct Rendered {
 }
 
 pub fn render(config: &GatewayConfig) -> Rendered {
-    let body = serde_yaml::to_string(config).expect("GatewayConfig serializes");
+    let body = featherbit::yaml::to_string(config).expect("GatewayConfig serializes");
     let yaml = format!("{HEADER}{body}");
     let hash = hex::encode(Sha256::digest(yaml.as_bytes()));
     Rendered { yaml, hash }
@@ -25,7 +25,7 @@ mod tests {
     use featherbit::config::GatewayConfig;
 
     fn cfg(yaml: &str) -> GatewayConfig {
-        serde_yaml::from_str(yaml).unwrap()
+        featherbit::yaml::from_str(yaml).unwrap()
     }
 
     #[test]
@@ -38,7 +38,7 @@ mod tests {
         assert_eq!(a.hash.len(), 64);
         assert_eq!(a.hash, hex::encode(sha2::Sha256::digest(a.yaml.as_bytes())));
         assert!(a.yaml.starts_with("# Rendered by featherbit-operator"));
-        let back: GatewayConfig = serde_yaml::from_str(&a.yaml).unwrap();
+        let back: GatewayConfig = featherbit::yaml::from_str(&a.yaml).unwrap();
         assert_eq!(
             serde_json::to_value(&back).unwrap(),
             serde_json::to_value(&c).unwrap()
@@ -68,7 +68,7 @@ mod tests {
     #[test]
     fn empty_config_renders_empty_lists() {
         let r = render(&cfg("{}"));
-        let back: GatewayConfig = serde_yaml::from_str(&r.yaml).unwrap();
+        let back: GatewayConfig = featherbit::yaml::from_str(&r.yaml).unwrap();
         assert!(back.routes.is_empty() && back.policies.is_empty());
     }
 }

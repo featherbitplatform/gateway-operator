@@ -425,7 +425,7 @@ mod tests {
                 created: None,
             },
             spec: SpecBody {
-                body: serde_yaml::from_str(yaml).unwrap(),
+                body: featherbit::yaml::from_str(yaml).unwrap(),
             },
             labels: Default::default(),
         }
@@ -439,7 +439,7 @@ mod tests {
                 generation: 7,
                 created: None,
             },
-            spec: serde_yaml::from_str(spec_yaml).unwrap(),
+            spec: featherbit::yaml::from_str(spec_yaml).unwrap(),
             namespaces: vec![],
             candidates,
             previous_hash: previous_hash.map(String::from),
@@ -781,7 +781,7 @@ mod tests {
     }
 
     fn spec_of(y: &str) -> SinkSpec {
-        serde_yaml::from_str(&format!("{{ {y} }}")).unwrap()
+        featherbit::yaml::from_str(&format!("{{ {y} }}")).unwrap()
     }
 
     #[test]
