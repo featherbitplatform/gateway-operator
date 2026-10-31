@@ -1,6 +1,6 @@
 [package]
 name = "featherbit-operator"
-version = "0.17.0"
+version = "0.18.0"
 edition = "2021"
 publish = false
 description = "Kubernetes operator for the featherbit API gateway"
@@ -9,7 +9,7 @@ license = "Apache-2.0"
 [dependencies]
 # Pins the gateway release tag; bump at each gateway release (the gateway's
 # tests/lib_surface.rs pins the surface this crate links).
-featherbit = { version = "0.17", git = "https://github.com/featherbitplatform/gateway", tag = "v0.17.0", default-features = false, features = ["redis-store"] }
+featherbit = { version = "0.18", git = "https://github.com/featherbitplatform/gateway", tag = "v0.18.0", default-features = false, features = ["redis-store"] }
 
 kube = { version = "4", default-features = false, features = ["client", "runtime", "derive", "admission", "rustls-tls"] }
 k8s-openapi = { version = "0.28", features = ["latest", "schemars"] }
