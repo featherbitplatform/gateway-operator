@@ -77,7 +77,10 @@ helm install edge "$GATEWAY_CHART" ${CHART_VERSION_ARGS[@]+"${CHART_VERSION_ARGS
 kubectl apply -f e2e/samples/gateway-configmap.yaml -f e2e/samples/policy-hello.yaml -f e2e/samples/route-hello.yaml
 wait_cond gw featherbitgateway/edge Ready
 wait_cond shop route/hello Programmed
-kubectl -n gw get configmap edge-gateway-config -o jsonpath='{.data.gateway\.yaml}' | grep -q 'via": "operator' \
+# Checks the node and its payload word, not the exact quoting: the YAML emitter
+# decides how the JSON string in response_example is quoted.
+rendered=$(kubectl -n gw get configmap edge-gateway-config -o jsonpath='{.data.gateway\.yaml}')
+{ grep -q 'type: mocking' <<<"$rendered" && grep -q operator <<<"$rendered"; } \
   || fail "ConfigMap not rendered"
 kubectl -n gw port-forward svc/edge-featherbit-gateway 18080:80 >/dev/null 2>&1 &
 PF_PIDS+=($!)
